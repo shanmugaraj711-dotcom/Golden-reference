@@ -15,6 +15,7 @@ jobs:
       contents: read
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIXTURE_INSTRUCTION: ${{ inputs.instruction }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,4 +34,4 @@ jobs:
           python-version: "3.11"
 
       - name: Run Project Factory Codex adapter against fixture
-        run: python scripts/codex_fixture_smoke.py "${{ inputs.instruction }}"
+        run: python scripts/codex_fixture_smoke.py "$FIXTURE_INSTRUCTION"
