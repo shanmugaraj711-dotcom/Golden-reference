@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "project": "PromptStudio.ai",
+  "role": "golden-reference",
+  "automationRepository": "Golden-reference",
+  "phase": 2,
+  "status": "controlled-orchestrator-implemented",
+  "completionRule": "All required acceptance criteria must have evidence-backed PASS status or an explicit human-approved exception.",
+  "resumeRule": "A future run reads this checkpoint plus linked evidence before taking new actions.",
+  "phase1": "complete",
+  "phase2": "implemented",
+  "next": "Run CI fixture gates, then add a real project adapter and controlled coding-agent execution."
+}
