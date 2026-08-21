@@ -1,0 +1,41 @@
+from project_factory.model_provider import ModelRequest, ModelResponse
+from project_factory.model_router import ModelRouter, RoutingPolicy
+
+
+class FakeProvider:
+    def __init__(self, name, local, cost):
+        self.name = name
+        self.local = local
+        self.cost = cost
+        self.calls = 0
+
+    def available(self):
+        return True
+
+    def is_local(self):
+        return self.local
+
+    def estimated_cost(self, request):
+        return self.cost
+
+    def complete(self, request):
+        self.calls += 1
+        return ModelResponse(self.name, "fixture", "ok", estimated_cost=self.cost)
+
+
+def test_local_provider_is_preferred_when_available():
+    local = FakeProvider("local", True, 0.0)
+    external = FakeProvider("external", False, 0.01)
+    router = ModelRouter([external, local], RoutingPolicy(prefer_local=True, max_cost=0.0))
+    result = router.complete(ModelRequest("code", "build fixture"))
+    assert result.provider == "local"
+    assert local.calls == 1
+    assert external.calls == 0
+
+
+def test_external_provider_can_be_selected_when_policy_allows_it():
+    external = FakeProvider("external", False, 0.01)
+    router = ModelRouter([external], RoutingPolicy(prefer_local=False, max_cost=0.01))
+    result = router.complete(ModelRequest("debug", "fix fixture"))
+    assert result.provider == "external"
+    assert external.calls == 1
