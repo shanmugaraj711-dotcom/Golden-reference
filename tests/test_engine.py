@@ -1,4 +1,5 @@
 from project_factory import ProjectFactory, RunResult
+from project_factory.agent_adapter import AgentResult, AgentTask
 from project_factory.engine import Status, Task
 
 
@@ -90,3 +91,21 @@ def test_duplicate_task_ids_are_rejected():
         assert False, "duplicate task id should fail"
     except ValueError as exc:
         assert "Duplicate task id" in str(exc)
+
+
+class FakeAgent:
+    def execute(self, instruction: str, *, workspace: str) -> AgentResult:
+        return AgentResult(True, f"executed: {instruction}", ["fixture.txt"], ["agent event"])
+
+
+def test_agent_task_is_executed_and_evidence_reaches_factory():
+    agent_task = AgentTask(FakeAgent(), "improve fixture", "/tmp/fixture")
+    factory = ProjectFactory("run-7", "fixture-agent", max_repairs=0)
+    factory.add_task(Task("agent", "Agent implementation", agent_task))
+
+    result = factory.run()
+
+    assert result.status is Status.COMPLETE
+    assert agent_task.last_result is not None
+    assert any("executed: improve fixture" in e.detail for e in result.state.evidence)
+    assert any("agent event" in e.detail for e in result.state.evidence)
