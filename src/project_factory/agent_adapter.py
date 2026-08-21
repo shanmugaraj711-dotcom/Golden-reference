@@ -35,13 +35,7 @@ class CommandCodingAgent:
 
 @dataclass
 class CodexCliAgent:
-    """Real OpenAI Codex CLI adapter for controlled project workspaces.
-
-    Codex is invoked non-interactively with a workspace-write sandbox. The
-    workspace must be an existing Git repository. We capture the agent output,
-    exit code, and Git changed-file evidence so the Project Factory can make a
-    truthful gate decision.
-    """
+    """Real OpenAI Codex CLI adapter for controlled project workspaces."""
 
     executable: Sequence[str] = ("codex", "exec")
     timeout_seconds: int = 1800
@@ -70,21 +64,11 @@ class CodexCliAgent:
 
         try:
             completed = subprocess.run(
-                command,
-                cwd=root,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=self.timeout_seconds,
+                command, cwd=root, capture_output=True, text=True,
+                check=False, timeout=self.timeout_seconds,
             )
         except subprocess.TimeoutExpired as exc:
-            return AgentResult(
-                False,
-                "Codex execution timed out",
-                sorted(before),
-                [str(exc)],
-                returncode=124,
-            )
+            return AgentResult(False, "Codex execution timed out", sorted(before), [str(exc)], 124)
 
         after = set(self._git(root, "status", "--porcelain=v1", "--untracked-files=all"))
         changed = sorted(before.symmetric_difference(after))
@@ -96,19 +80,23 @@ class CodexCliAgent:
                 continue
 
         summary = "Codex completed" if completed.returncode == 0 else "Codex failed"
-        evidence = [
-            f"exit_code={completed.returncode}",
-            f"changed_entries={len(changed)}",
-        ]
+        evidence = [f"exit_code={completed.returncode}", f"changed_entries={len(changed)}"]
         if completed.stderr.strip():
             evidence.append(completed.stderr.strip()[-4000:])
         if events:
             evidence.append(f"json_events={len(events)}")
+        return AgentResult(completed.returncode == 0, summary, changed, evidence, completed.returncode)
 
-        return AgentResult(
-            completed.returncode == 0,
-            summary,
-            changed,
-            evidence,
-            completed.returncode,
-        )
+
+@dataclass
+class AgentTask:
+    """Callable task bridge: ProjectFactory -> CodingAgent -> evidence."""
+
+    agent: CodingAgent
+    instruction: str
+    workspace: str
+    last_result: AgentResult | None = None
+
+    def __call__(self) -> bool:
+        self.last_result = self.agent.execute(self.instruction, workspace=self.workspace)
+        return self.last_result.success
