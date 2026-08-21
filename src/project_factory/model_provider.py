@@ -26,7 +26,10 @@ class ModelProvider(Protocol):
 
     name: str
 
-    def generate(self, request: ModelRequest) -> ModelResponse: ...
+    def available(self) -> bool: ...
+    def is_local(self) -> bool: ...
+    def estimated_cost(self, request: ModelRequest) -> float: ...
+    def complete(self, request: ModelRequest) -> ModelResponse: ...
 
 
 class UnconfiguredProvider:
@@ -34,7 +37,16 @@ class UnconfiguredProvider:
 
     name = "unconfigured"
 
-    def generate(self, request: ModelRequest) -> ModelResponse:
+    def available(self) -> bool:
+        return False
+
+    def is_local(self) -> bool:
+        return True
+
+    def estimated_cost(self, request: ModelRequest) -> float:
+        return 0.0
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
         raise RuntimeError(
             "No model provider configured. Configure an approved provider before execution."
         )
