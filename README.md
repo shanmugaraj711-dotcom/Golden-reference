@@ -14,6 +14,9 @@ Its purpose is to turn a proven software-development workflow into a repeatable,
 
 - Phase 1 — workflow specification: complete
 - Phase 2 — controlled deterministic orchestrator: implemented
+- Fixture gates: implemented and covered by tests
+- Project adapter boundary: implemented
+- Coding-agent boundary: implemented but safely gated
 - CI contract tests: enabled
 - Production autonomy: intentionally not enabled yet
 
@@ -25,6 +28,8 @@ Its purpose is to turn a proven software-development workflow into a repeatable,
 
 > A model saying "done" is not evidence. A passing, observable check is evidence.
 
-The engine is intentionally small at this stage. We will prove state persistence, bounded repair, checkpoint resume, and truthful completion before adding real coding-agent execution.
+### Safety rule
 
-See `docs/project-factory/PROJECT-FACTORY-BLUEPRINT.md` and `docs/project-factory/PHASE-2-IMPLEMENTATION.md` for the governing contracts.
+The factory does not convert arbitrary prompt text into shell commands or grant production deployment authority to an agent. A live coding-agent adapter must be explicitly configured with an approved executable, isolated workspace, timeout/kill policy, evidence capture, and escalation rules.
+
+See `docs/project-factory/PROJECT-FACTORY-BLUEPRINT.md`, `docs/project-factory/PHASE-2-IMPLEMENTATION.md`, and `docs/project-factory/PHASE-2-VERIFICATION.md` for the governing contracts.
