@@ -65,7 +65,7 @@ class RunResult:
 
 
 class ProjectFactory:
-    """Small deterministic orchestrator used to prove the Phase 2 contract."""
+    """Evidence-driven deterministic orchestrator with pluggable workers."""
 
     def __init__(self, run_id: str, project_id: str, max_repairs: int = 3):
         self.state = RunState(run_id=run_id, project_id=project_id)
@@ -79,6 +79,17 @@ class ProjectFactory:
 
     def _record(self, stage: Stage, action: str, result: str, detail: str = "") -> None:
         self.state.evidence.append(Evidence(stage.value, action, result, detail))
+
+    def _worker_evidence(self, task: Task) -> None:
+        result = getattr(task.run, "last_result", None)
+        if result is None:
+            return
+        detail = result.summary
+        if result.changed_files:
+            detail += f"; changed={','.join(result.changed_files)}"
+        self._record(Stage.BUILD, task.id, "passed" if result.success else "failed", detail)
+        for item in result.evidence:
+            self._record(Stage.BUILD, task.id, "evidence", item)
 
     def _checkpoint(self) -> None:
         self.state.checkpoint = {
@@ -120,7 +131,8 @@ class ProjectFactory:
                 task.attempts += 1
                 try:
                     passed = bool(task.run())
-                except Exception as exc:  # worker boundary: failure becomes evidence
+                    self._worker_evidence(task)
+                except Exception as exc:
                     self._record(Stage.TEST, task.id, "failed", repr(exc))
                     passed = False
                 else:
