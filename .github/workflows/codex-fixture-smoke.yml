@@ -1,0 +1,36 @@
+name: Codex Fixture Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      instruction:
+        description: "Controlled instruction for the sample fixture"
+        required: true
+        default: "Inspect the fixture, make one small safe improvement, and report exactly what changed. Do not access secrets or modify files outside the fixture."
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate credential is configured
+        run: test -n "$OPENAI_API_KEY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Project Factory Codex adapter against fixture
+        run: python scripts/codex_fixture_smoke.py "${{ inputs.instruction }}"
