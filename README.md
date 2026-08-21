@@ -13,11 +13,12 @@ Its purpose is to turn a proven software-development workflow into a repeatable,
 ### Current status
 
 - Phase 1 — workflow specification: complete
-- Phase 2 — controlled deterministic orchestrator: implemented
+- Phase 2 — controlled deterministic orchestrator: complete
 - Fixture gates: implemented and covered by tests
 - Project adapter boundary: implemented
-- Coding-agent boundary: implemented but safely gated
-- CI contract tests: enabled
+- Coding-agent task bridge: implemented
+- Real Codex CLI adapter: implemented with sandbox, timeout, Git workspace, and evidence controls
+- Controlled Codex fixture smoke workflow: ready (`workflow_dispatch`)
 - Production autonomy: intentionally not enabled yet
 
 ### Pipeline
@@ -30,6 +31,16 @@ Its purpose is to turn a proven software-development workflow into a repeatable,
 
 ### Safety rule
 
-The factory does not convert arbitrary prompt text into shell commands or grant production deployment authority to an agent. A live coding-agent adapter must be explicitly configured with an approved executable, isolated workspace, timeout/kill policy, evidence capture, and escalation rules.
+The factory does not convert arbitrary prompt text into shell commands or grant production deployment authority to an agent. Coding-agent execution is isolated to an explicit workspace, uses a bounded sandbox and timeout, captures changed-file evidence, and remains subject to the factory's downstream gates.
 
-See `docs/project-factory/PROJECT-FACTORY-BLUEPRINT.md`, `docs/project-factory/PHASE-2-IMPLEMENTATION.md`, and `docs/project-factory/PHASE-2-VERIFICATION.md` for the governing contracts.
+### Verification
+
+The deterministic fixture suite covers happy path, transient repair, exceptions, repair budgets, checkpoint resume, validation, adapter behavior, and factory-to-agent evidence propagation.
+
+The manual Codex fixture smoke workflow runs the real Codex CLI against a temporary Git fixture only. It requires an approved `OPENAI_API_KEY` repository secret and never writes to the Golden-reference checkout.
+
+See:
+- `docs/project-factory/PROJECT-FACTORY-BLUEPRINT.md`
+- `docs/project-factory/PHASE-2-IMPLEMENTATION.md`
+- `docs/project-factory/PHASE-2-VERIFICATION.md`
+- `docs/project-factory/PHASE-3-CODEX-INTEGRATION.md`
