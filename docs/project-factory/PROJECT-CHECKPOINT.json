@@ -1,13 +1,20 @@
 {
   "schemaVersion": "1.0",
-  "project": "PromptStudio.ai",
-  "role": "golden-reference",
+  "referenceProject": "PromptStudio.ai",
   "automationRepository": "Golden-reference",
-  "phase": 2,
-  "status": "controlled-orchestrator-implemented",
+  "phase": 3,
+  "status": "controlled-coding-agent-integrated",
+  "pipeline": ["intake", "specify", "plan", "build", "test", "verify", "diagnose", "repair", "regression", "release", "checkpoint"],
+  "gates": {
+    "deterministicFixture": "implemented",
+    "repairAndResume": "implemented",
+    "projectAdapter": "implemented",
+    "agentTaskBridge": "implemented",
+    "codexCliAdapter": "implemented",
+    "codexFixtureSmokeWorkflow": "ready"
+  },
   "completionRule": "All required acceptance criteria must have evidence-backed PASS status or an explicit human-approved exception.",
   "resumeRule": "A future run reads this checkpoint plus linked evidence before taking new actions.",
-  "phase1": "complete",
-  "phase2": "implemented",
-  "next": "Run CI fixture gates, then add a real project adapter and controlled coding-agent execution."
+  "safety": "No production deployment authority; Codex runs only in an explicit Git workspace with bounded sandbox and timeout.",
+  "next": "Execute the manual Codex fixture smoke gate with an approved repository secret, then prove the factory on an independent second project."
 }
