@@ -10,8 +10,9 @@ from .model_provider import ModelRequest, ModelResponse, ModelProvider
 class RoutingPolicy:
     """Runtime policy for choosing an AI provider.
 
-    The default is deliberately fail-closed: no paid/external provider can be
-    selected unless the operator explicitly raises the spending ceiling.
+    The default is fail-closed: paid providers cannot be selected unless the
+    operator explicitly raises the spending ceiling. A provider explicitly
+    reporting zero estimated cost may be used at a zero ceiling.
     """
 
     prefer_local: bool = True
@@ -42,14 +43,21 @@ class ModelRouter:
         if eligible:
             return eligible[0].complete(request)
 
-        # External providers are never a silent escape hatch. They require
-        # both explicit opt-in and an explicit non-zero spending ceiling.
-        if self.policy.allow_external and self.policy.max_cost > 0:
+        # External providers are never a silent escape hatch. Explicit opt-in
+        # is required. A zero-cost external provider (for example an approved
+        # free-tier runtime) can operate at a zero spending ceiling; paid
+        # external providers require a positive ceiling.
+        if self.policy.allow_external:
             external = [
                 p for p in candidates
                 if not p.is_local() and p.estimated_cost(request) <= self.policy.max_cost
             ]
             if external:
-                return external[0].complete(request)
+                if self.policy.max_cost == 0:
+                    free_external = [p for p in external if p.estimated_cost(request) == 0]
+                    if free_external:
+                        return free_external[0].complete(request)
+                else:
+                    return external[0].complete(request)
 
         raise RuntimeError("No provider satisfies the routing policy")
