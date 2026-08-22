@@ -28,16 +28,24 @@ def read(store,pid):
 
 def normalise(p):
  p.setdefault("lifecycleState","INTAKE"); p.setdefault("currentVersion","0.1.0"); p.setdefault("previewUrl",""); p.setdefault("repository",""); p.setdefault("hostingTarget",""); p.setdefault("productionUrl","")
- p.setdefault("verification",{k:"PENDING" for k in VK}); p.setdefault("ownership",{k:"PENDING" for k in OK}); p.setdefault("maintenance",{"status":"NOT_ENROLLED","currentVersion":p["currentVersion"],"recentChanges":[]}); p.setdefault("nextCustomerAction","Factory intake received"); return p
+ p.setdefault("verification",{k:"PENDING" for k in VK}); p.setdefault("ownership",{k:"PENDING" for k in OK}); p.setdefault("maintenance",{"status":"NOT_ENROLLED","currentVersion":p["currentVersion"],"recentChanges":[]}); p.setdefault("nextCustomerAction","Factory intake received"); p.setdefault("lifecycleHistory",[]); p.setdefault("deliveryEvidence",{}); return p
 
 def update(data):
  pid=str(data.get("projectId","")).strip()
  if not pid: raise ValueError("projectId is required")
  store=db(); ref=store.collection("projects").document(pid); p=read(store,pid)
  if not p: raise LookupError("project not found")
- p=normalise(p); patch={}
- state=str(data.get("lifecycleState",p["lifecycleState"])).upper()
+ p=normalise(p); patch={}; old=str(p["lifecycleState"]).upper(); state=str(data.get("lifecycleState",old)).upper()
  if state not in STATES: raise ValueError("invalid lifecycleState")
+ if STATES.index(state)<STATES.index(old): raise ValueError("lifecycleState cannot move backwards")
+ if state=="VERIFYING" and not all(str(p["verification"].get(k,"PENDING")).upper()=="PASSED" for k in VK):
+  # Allow entering verification; evidence is required before READY.
+  pass
+ if state=="READY":
+  if not all(str(p["verification"].get(k,"PENDING")).upper()=="PASSED" for k in VK): raise ValueError("READY requires qualityGate, deployment and healthCheck to be PASSED")
+ if state=="DELIVERED":
+  if old!="READY": raise ValueError("DELIVERED requires READY")
+  if not all(str(p["ownership"].get(k,"PENDING")).upper() in ("READY","CONNECTED","PASSED") for k in OK): raise ValueError("DELIVERED requires repository, hosting and handoff evidence")
  patch["lifecycleState"]=state
  patch["nextCustomerAction"]={"INTAKE":"Factory intake received","BUILDING":"Factory build in progress","VERIFYING":"Factory verification in progress","READY":"Project is ready for customer delivery","DELIVERED":"Delivery completed"}[state]
  for f in ("repository","hostingTarget","previewUrl","productionUrl","currentVersion"):
@@ -47,15 +55,19 @@ def update(data):
    merged=dict(p.get(group) or {}); merged.update({k:str(data[group][k]).upper() for k in keys if k in data[group]}); patch[group]=merged
  if isinstance(data.get("maintenance"),dict):
   merged=dict(p.get("maintenance") or {}); merged.update(data["maintenance"]); patch["maintenance"]=merged
+ evidence=dict(p.get("deliveryEvidence") or {})
+ if isinstance(data.get("deliveryEvidence"),dict): evidence.update(data["deliveryEvidence"]); patch["deliveryEvidence"]=evidence
  if "recentChange" in data:
   m=dict(p.get("maintenance") or {}); changes=list(m.get("recentChanges") or []); changes.append(str(data["recentChange"])); m["recentChanges"]=changes[-20:]; patch["maintenance"]=m
- patch["updatedAt"]=datetime.now(timezone.utc).isoformat(); ref.update(patch); p.update(patch); return normalise(p)
+ now=datetime.now(timezone.utc).isoformat(); history=list(p.get("lifecycleHistory") or [])
+ if state!=old: history.append({"from":old,"to":state,"at":now}); patch["lifecycleHistory"]=history[-50:]
+ patch["updatedAt"]=now; ref.update(patch); p.update(patch); return normalise(p)
 
 def create(data):
  c=str(data.get("customerId","")).strip(); n=str(data.get("projectName","")).strip(); b=str(data.get("brief","")).strip(); m=str(data.get("deliveryModel","")).strip()
  if not c or not n or not b: raise ValueError("customerId, projectName and brief are required")
  if m not in {"transfer","deploy","managed"}: raise ValueError("invalid deliveryModel")
- now=datetime.now(timezone.utc).isoformat(); p={"customerId":c,"projectId":f"proj_{uuid4().hex}","projectName":n,"brief":b,"deliveryModel":m,"lifecycleState":"INTAKE","currentVersion":"0.1.0","previewUrl":"","repository":"","hostingTarget":"","productionUrl":"","verification":{k:"PENDING" for k in VK},"ownership":{k:"PENDING" for k in OK},"maintenance":{"status":"NOT_ENROLLED","currentVersion":"0.1.0","recentChanges":[]},"nextCustomerAction":"Factory intake received","createdAt":now,"updatedAt":now}; db().collection("projects").document(p["projectId"]).create(p); return p
+ now=datetime.now(timezone.utc).isoformat(); p={"customerId":c,"projectId":f"proj_{uuid4().hex}","projectName":n,"brief":b,"deliveryModel":m,"lifecycleState":"INTAKE","currentVersion":"0.1.0","previewUrl":"","repository":"","hostingTarget":"","productionUrl":"","verification":{k:"PENDING" for k in VK},"ownership":{k:"PENDING" for k in OK},"maintenance":{"status":"NOT_ENROLLED","currentVersion":"0.1.0","recentChanges":[]},"nextCustomerAction":"Factory intake received","lifecycleHistory":[],"deliveryEvidence":{},"createdAt":now,"updatedAt":now}; db().collection("projects").document(p["projectId"]).create(p); return p
 
 class handler(BaseHTTPRequestHandler):
  def do_GET(self):
