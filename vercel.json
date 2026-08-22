@@ -1,7 +1,9 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.py?route=$1" }
+    { "source": "/api/projects", "destination": "/api/projects.py" },
+    { "source": "/api/projects/:path*", "destination": "/api/projects.py" },
+    { "source": "/api", "destination": "/api/index.py" }
   ],
   "headers": [
     { "source": "/", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }
