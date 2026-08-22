@@ -112,7 +112,7 @@ jobs:
             git clone "https://x-access-token:${FACTORY_DELIVERY_TOKEN}@github.com/${DESTINATION_REPO}.git" /tmp/factory-destination
             cd /tmp/factory-destination
             git checkout "$DESTINATION_BRANCH"
-            rm -rf ./* ./.??* 2>/dev/null || true
+            find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
             cp -R "$GITHUB_WORKSPACE/generated-project/." ./
             git config user.name "Project Factory"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
