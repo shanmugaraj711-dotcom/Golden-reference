@@ -11,6 +11,22 @@ on:
         description: "Delivery project name"
         required: true
         default: "factory-demo"
+      delivery_mode:
+        description: "transfer, managed, or demo"
+        required: true
+        default: "demo"
+      destination_repo:
+        description: "Optional destination repo owner/name"
+        required: false
+        default: ""
+      destination_branch:
+        description: "Destination branch"
+        required: true
+        default: "main"
+      destination_url:
+        description: "Optional live URL for post-delivery health check"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -26,6 +42,11 @@ jobs:
       FACTORY_REQUEST: ${{ inputs.request }}
       FACTORY_WORKSPACE: generated-project
       PROJECT_NAME: ${{ inputs.project_name }}
+      DELIVERY_MODE: ${{ inputs.delivery_mode }}
+      DESTINATION_REPO: ${{ inputs.destination_repo }}
+      DESTINATION_BRANCH: ${{ inputs.destination_branch }}
+      DESTINATION_URL: ${{ inputs.destination_url }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -52,13 +73,24 @@ jobs:
           for p in sorted(x for x in root.rglob("*") if x.is_file()):
               data=p.read_bytes()
               files.append({"path":str(p.relative_to(root)),"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest()})
-          (root/"factory-manifest.json").write_text(json.dumps({"request":os.environ["FACTORY_REQUEST"],"model":os.environ["GEMINI_MODEL"],"gate":"passed","files":files},indent=2),encoding="utf-8")
+          manifest={
+              "project_name":os.environ["PROJECT_NAME"],
+              "delivery_mode":os.environ["DELIVERY_MODE"],
+              "request":os.environ["FACTORY_REQUEST"],
+              "model":os.environ["GEMINI_MODEL"],
+              "gate":"passed",
+              "destination_repo":os.environ.get("DESTINATION_REPO", ""),
+              "destination_branch":os.environ["DESTINATION_BRANCH"],
+              "files":files,
+          }
+          (root/"factory-manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf-8")
           PY
 
-      - name: Publish verified project branch
+      - name: Prepare verified delivery
         id: publish
         env:
           GH_TOKEN: ${{ github.token }}
+          FACTORY_DELIVERY_TOKEN: ${{ secrets.FACTORY_DELIVERY_TOKEN }}
         run: |
           set -euo pipefail
           SAFE_NAME=$(printf '%s' "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-*//;s/-*$//')
@@ -73,13 +105,48 @@ jobs:
           git add .factory-output
           git commit -m "factory: deliver ${SAFE_NAME}"
           git push origin "$BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          if gh pr create --base main --head "$BRANCH" --title "factory: deliver ${SAFE_NAME}" --body "Automated Project Factory V2 delivery. Generated, validated, and packaged by the Factory. Review before merging. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --draft; then
-            echo "pull_request_created=true" >> "$GITHUB_OUTPUT"
+          echo "source_branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$DESTINATION_REPO" ] && [ -n "$FACTORY_DELIVERY_TOKEN" ]; then
+            rm -rf /tmp/factory-destination
+            git clone "https://x-access-token:${FACTORY_DELIVERY_TOKEN}@github.com/${DESTINATION_REPO}.git" /tmp/factory-destination
+            cd /tmp/factory-destination
+            git checkout "$DESTINATION_BRANCH"
+            rm -rf ./* ./.??* 2>/dev/null || true
+            cp -R "$GITHUB_WORKSPACE/generated-project/." ./
+            git config user.name "Project Factory"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "factory: deliver ${SAFE_NAME}" || true
+            git push origin "$DESTINATION_BRANCH"
+            echo "destination_published=true" >> "$GITHUB_OUTPUT"
           else
-            echo "GitHub Actions cannot create PRs under the repository's current Actions policy. Branch publication succeeded; PR creation is handled by the connected delivery control."
-            echo "pull_request_created=false" >> "$GITHUB_OUTPUT"
+            echo "destination_published=false" >> "$GITHUB_OUTPUT"
+            echo "No destination token/repo supplied; source delivery branch remains the verified handoff artifact."
           fi
+
+          if gh pr create --base main --head "$BRANCH" --title "factory: deliver ${SAFE_NAME}" --body "Automated Project Factory V2 delivery. Generated and validated by the Factory. Review before merging. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --draft >/tmp/pr-url 2>/tmp/pr-error; then
+            echo "pull_request_created=true" >> "$GITHUB_OUTPUT"
+            cat /tmp/pr-url
+          else
+            echo "pull_request_created=false" >> "$GITHUB_OUTPUT"
+            echo "PR creation unavailable under current GitHub Actions policy; branch publication succeeded."
+          fi
+
+      - name: Verify destination URL
+        if: ${{ inputs.destination_url != '' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, urllib.request
+          url=os.environ["DESTINATION_URL"].rstrip("/")
+          with urllib.request.urlopen(url, timeout=20) as r:
+              body=r.read().decode("utf-8", errors="replace")
+              if r.status != 200:
+                  raise SystemExit(f"health check failed: HTTP {r.status}")
+              print(f"destination health: HTTP {r.status}")
+              print(body[:500])
+          PY
 
       - name: Package evidence
         run: tar -czf project-factory-v2-output.tgz -C generated-project .
@@ -91,12 +158,11 @@ jobs:
           path: project-factory-v2-output.tgz
           if-no-files-found: error
 
-      - name: Vercel deployment readiness
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Delivery summary
         run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "VERCEL_TOKEN not configured; GitHub delivery is complete and Vercel deployment remains opt-in."
-            exit 0
-          fi
-          echo "VERCEL_TOKEN is configured; deployment adapter can be enabled after the destination project is explicitly selected."
+          echo "Project Factory V2 complete"
+          echo "mode=$DELIVERY_MODE"
+          echo "project=$PROJECT_NAME"
+          echo "destination_repo=${DESTINATION_REPO:-none}"
+          echo "destination_branch=$DESTINATION_BRANCH"
+          echo "destination_url=${DESTINATION_URL:-none}"
