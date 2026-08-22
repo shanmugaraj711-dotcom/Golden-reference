@@ -16,6 +16,7 @@
   ],
   "rewrites": [
     { "source": "/dashboard", "destination": "/dashboard/index.html" },
-    { "source": "/dashboard/", "destination": "/dashboard/index.html" }
+    { "source": "/dashboard/", "destination": "/dashboard/index.html" },
+    { "source": "/api/projects", "destination": "/api/projects_route" }
   ]
 }
