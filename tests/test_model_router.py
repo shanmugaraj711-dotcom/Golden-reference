@@ -34,26 +34,38 @@ def test_local_provider_is_preferred_when_available():
     assert external.calls == 0
 
 
-def test_external_provider_can_be_selected_when_policy_allows_it():
+def test_external_provider_requires_explicit_opt_in_and_budget():
     external = FakeProvider("external", False, 0.01)
-    router = ModelRouter([external], RoutingPolicy(prefer_local=False, max_cost=0.01))
+    router = ModelRouter(
+        [external],
+        RoutingPolicy(prefer_local=False, allow_external=True, max_cost=0.01),
+    )
     result = router.complete(ModelRequest("debug", "fix fixture"))
     assert result.provider == "external"
     assert external.calls == 1
 
 
-def test_external_fallback_is_used_when_local_is_unavailable():
+def test_zero_spend_policy_never_falls_back_to_paid_external():
     local = FakeProvider("local", True, 0.0, available=False)
     external = FakeProvider("external", False, 0.01)
-    router = ModelRouter([local, external], RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.01))
-    result = router.complete(ModelRequest("debug", "fix fixture"))
-    assert result.provider == "external"
+    router = ModelRouter(
+        [local, external],
+        RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.0),
+    )
+    try:
+        router.complete(ModelRequest("debug", "fix fixture"))
+        assert False, "zero-spend policy must block paid fallback"
+    except RuntimeError as exc:
+        assert "routing policy" in str(exc)
 
 
 def test_router_blocks_when_no_provider_meets_cost_ceiling():
     local = FakeProvider("local", True, 0.01)
     external = FakeProvider("external", False, 0.02)
-    router = ModelRouter([local, external], RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.0))
+    router = ModelRouter(
+        [local, external],
+        RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.0),
+    )
     try:
         router.complete(ModelRequest("code", "build fixture"))
         assert False, "router must not exceed the configured cost ceiling"
