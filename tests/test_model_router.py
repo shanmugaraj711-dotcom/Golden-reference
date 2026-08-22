@@ -34,7 +34,18 @@ def test_local_provider_is_preferred_when_available():
     assert external.calls == 0
 
 
-def test_external_provider_requires_explicit_opt_in_and_budget():
+def test_free_external_provider_can_run_at_zero_ceiling_with_explicit_opt_in():
+    external_free = FakeProvider("free-external", False, 0.0)
+    router = ModelRouter(
+        [external_free],
+        RoutingPolicy(prefer_local=False, allow_external=True, max_cost=0.0),
+    )
+    result = router.complete(ModelRequest("proof", "hello"))
+    assert result.provider == "free-external"
+    assert external_free.calls == 1
+
+
+def test_paid_external_provider_requires_explicit_opt_in_and_budget():
     external = FakeProvider("external", False, 0.01)
     router = ModelRouter(
         [external],
