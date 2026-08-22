@@ -39,3 +39,22 @@ def test_external_provider_can_be_selected_when_policy_allows_it():
     result = router.complete(ModelRequest("debug", "fix fixture"))
     assert result.provider == "external"
     assert external.calls == 1
+
+
+def test_external_fallback_is_allowed_when_local_exceeds_cost_ceiling():
+    local = FakeProvider("local", True, 0.0)
+    external = FakeProvider("external", False, 0.01)
+    router = ModelRouter([local, external], RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.01))
+    result = router.complete(ModelRequest("debug", "fix fixture"))
+    assert result.provider == "local"
+
+
+def test_router_blocks_when_no_provider_meets_zero_cost_policy():
+    local = FakeProvider("local", True, 0.01)
+    external = FakeProvider("external", False, 0.02)
+    router = ModelRouter([local, external], RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.0))
+    try:
+        router.complete(ModelRequest("code", "build fixture"))
+        assert False, "router must not exceed the configured cost ceiling"
+    except RuntimeError as exc:
+        assert "routing policy" in str(exc)
