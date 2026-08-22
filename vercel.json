@@ -6,6 +6,16 @@
       "headers": [
         { "key": "Cache-Control", "value": "no-store" }
       ]
+    },
+    {
+      "source": "/dashboard",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
     }
+  ],
+  "rewrites": [
+    { "source": "/dashboard", "destination": "/dashboard/index.html" },
+    { "source": "/dashboard/", "destination": "/dashboard/index.html" }
   ]
 }
