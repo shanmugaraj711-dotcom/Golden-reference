@@ -7,6 +7,8 @@
 - [x] Local-first strategy
 - [x] External fallback strategy
 - [x] Customer promise: finished project, not model access
+- [x] Customer delivery modes: managed / handover / hybrid
+- [x] Output types: web / API / Android / iOS / SaaS / automation
 
 ## Factory core
 - [x] Deterministic orchestration
@@ -18,6 +20,8 @@
 - [x] Project adapter
 - [x] Coding-agent boundary
 - [x] Factory runner
+- [x] Customer output contract
+- [x] Ownership/delivery gate
 
 ## Verification
 - [x] Happy-path fixture
@@ -49,6 +53,10 @@
 - [x] GitHub as source/control plane
 - [x] Vercel deployment target documented
 - [x] Customer does not need local development tools
+- [x] Customer does not need GitHub/Vercel for managed delivery
+- [x] Handover path defined
+- [x] Hybrid path defined
+- [x] Web/API/mobile/SaaS/automation output contract defined
 - [x] Second-project proof definition
 - [x] Launch gate documented
 - [ ] Live second-project execution: requires configured model runtime
@@ -68,7 +76,9 @@
 - **Zero-cost-first does not mean low quality.** Build, test, security, UX, verification, regression and evidence gates remain mandatory.
 - Never claim a live model or project is working without observable execution evidence.
 - Model choice is an implementation detail; the customer buys the finished project.
+- Never promise platform ownership transfer before checking the platform's actual transfer rules.
+- Never store customer production credentials in the repository.
 
 ## Hard truth
 
-Repository-side engineering is complete for the current milestone. The remaining unchecked items require an actual inference runtime and real execution evidence. GitHub alone cannot execute an LLM.
+The customer delivery architecture is now defined. The remaining unchecked items require an actual inference runtime and real execution evidence. GitHub alone cannot execute an LLM, and documentation cannot substitute for a live end-to-end build.
