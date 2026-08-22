@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import Sequence
 
 from .model_provider import ModelRequest, ModelResponse, ModelProvider
 
@@ -30,11 +30,13 @@ class ModelRouter:
         else:
             candidates.sort(key=lambda p: p.estimated_cost(request))
 
-        for provider in candidates:
-            cost = provider.estimated_cost(request)
-            if cost <= self.policy.max_cost:
-                return provider.complete(request)
+        eligible = [p for p in candidates if p.estimated_cost(request) <= self.policy.max_cost]
+        if eligible:
+            return eligible[0].complete(request)
 
         if self.policy.allow_external:
-            return candidates[0].complete(request)
+            external = [p for p in candidates if not p.is_local()]
+            if external:
+                return external[0].complete(request)
+
         raise RuntimeError("No provider satisfies the routing policy")
