@@ -1,0 +1,96 @@
+name: Project Factory V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: "Customer project request"
+        required: true
+        default: "Build a simple responsive coffee shop landing page with hero, menu, hours, and contact section."
+      project_name:
+        description: "Delivery project name"
+        required: true
+        default: "factory-demo"
+
+permissions:
+  contents: write
+
+jobs:
+  build-deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      FACTORY_REQUEST: ${{ inputs.request }}
+      FACTORY_WORKSPACE: generated-project
+      PROJECT_NAME: ${{ inputs.project_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Gemini secret
+        run: test -n "$GEMINI_API_KEY"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate project
+        run: python scripts/gemini_project_worker.py
+
+      - name: Validate generated project
+        run: python scripts/project_gate.py
+
+      - name: Create delivery manifest
+        run: |
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path("generated-project")
+          files=[]
+          for p in sorted(x for x in root.rglob("*") if x.is_file()):
+              data=p.read_bytes()
+              files.append({"path":str(p.relative_to(root)),"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest()})
+          (root/"factory-manifest.json").write_text(json.dumps({"request":os.environ["FACTORY_REQUEST"],"model":os.environ["GEMINI_MODEL"],"gate":"passed","files":files},indent=2),encoding="utf-8")
+          PY
+
+      - name: Publish verified project branch
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SAFE_NAME=$(printf '%s' "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-*//;s/-*$//')
+          BRANCH="factory-delivery/${SAFE_NAME}-${GITHUB_RUN_ID}"
+          git config user.name "Project Factory"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git switch -c "$BRANCH"
+          rm -rf .factory-output
+          mkdir -p .factory-output
+          cp -R generated-project/. .factory-output/
+          git add .factory-output
+          git commit -m "factory: deliver ${SAFE_NAME}"
+          git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          gh pr create --base main --head "$BRANCH" --title "factory: deliver ${SAFE_NAME}" --body "Automated Project Factory V2 delivery. Generated, validated, and packaged by the Factory. Review before merging. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --draft
+
+      - name: Package evidence
+        run: tar -czf project-factory-v2-output.tgz -C generated-project .
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-factory-v2-${{ github.run_id }}
+          path: project-factory-v2-output.tgz
+          if-no-files-found: error
+
+      - name: Vercel deployment readiness
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN not configured; GitHub delivery is complete and Vercel deployment remains opt-in."
+            exit 0
+          fi
+          echo "VERCEL_TOKEN is configured; deployment adapter can be enabled after the destination project is explicitly selected."
