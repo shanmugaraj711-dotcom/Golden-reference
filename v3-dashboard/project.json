@@ -1,0 +1,22 @@
+{
+  "projectName": "Factory Demo",
+  "brief": "Customer delivery proof project",
+  "deliveryModel": "deploy",
+  "version": "1.0.0",
+  "state": "LIVE",
+  "nextAction": "View the live project",
+  "repository": "factory-demo-delivery",
+  "hostingTarget": "Vercel",
+  "productionUrl": "https://factory-demo-delivery.vercel.app",
+  "qualityGate": "PASS",
+  "deployment": "VERIFIED",
+  "healthCheck": "PASS",
+  "ownership": "Customer",
+  "maintenance": "Not enrolled",
+  "events": [
+    {"time":"Generation","label":"Artifact generated and validated"},
+    {"time":"Delivery","label":"Destination repository populated"},
+    {"time":"Deployment","label":"Production deployment verified"},
+    {"time":"Health","label":"FACTORY_DESTINATION_OK"}
+  ]
+}
