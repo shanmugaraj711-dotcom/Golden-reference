@@ -1,9 +1,4 @@
-"""Single Vercel Python entrypoint for Project Factory API.
-
-Vercel's api/index.py is the stable catch-all entrypoint. Keep routing here
-instead of relying on legacy vercel.json routes, which can shadow sibling
-Python functions.
-"""
+"""Single Vercel Python entrypoint for Project Factory API."""
 from __future__ import annotations
 
 import json
@@ -29,9 +24,7 @@ def firestore_db():
         import firebase_admin
         from firebase_admin import credentials, firestore
     except Exception as exc:
-        raise RuntimeError(
-            f"firebase_admin unavailable: {type(exc).__name__}: {exc}"
-        ) from exc
+        raise RuntimeError(f"firebase_admin unavailable: {type(exc).__name__}: {exc}") from exc
 
     try:
         app = firebase_admin.get_app("golden-reference-firestore")
@@ -50,16 +43,8 @@ def firestore_db():
                 name="golden-reference-firestore",
             )
         except Exception as exc:
-            raise RuntimeError(
-                f"Firebase initialization failed: {type(exc).__name__}: {exc}"
-            ) from exc
-
-    try:
-        return firestore.client(app=app)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Firestore client failed: {type(exc).__name__}: {exc}"
-        ) from exc
+            raise RuntimeError(f"Firebase initialization failed: {type(exc).__name__}: {exc}") from exc
+    return firestore.client(app=app)
 
 
 def create_project(data):
@@ -81,14 +66,14 @@ def create_project(data):
         "deliveryModel": model,
         "lifecycleState": "INTAKE",
         "currentVersion": "0.1.0",
+        "previewUrl": "",
         "repository": "",
         "hostingTarget": "",
         "productionUrl": "",
-        "verification": {
-            "qualityGate": "PENDING",
-            "deployment": "PENDING",
-            "healthCheck": "PENDING",
-        },
+        "verification": {"qualityGate": "PENDING", "deployment": "PENDING", "healthCheck": "PENDING"},
+        "ownership": {"repository": "PENDING", "hosting": "PENDING", "handoff": "PENDING"},
+        "maintenance": {"status": "NOT_ENROLLED", "currentVersion": "0.1.0", "recentChanges": []},
+        "nextCustomerAction": "Factory intake received",
         "createdAt": now,
         "updatedAt": now,
     }
@@ -96,46 +81,50 @@ def create_project(data):
     return record
 
 
+def read_project(db, project_id):
+    snap = db.collection("projects").document(project_id).get()
+    if not snap.exists:
+        return None
+    return snap.to_dict()
+
+
+def read_latest(db, customer_id=""):
+    query = db.collection("projects")
+    if customer_id:
+        query = query.where("customerId", "==", customer_id)
+    docs = list(query.order_by("createdAt", direction="DESCENDING").limit(1).stream())
+    return docs[0].to_dict() if docs else None
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path.rstrip("/") or "/"
         if path in {"/api", "/"}:
-            send_json(self, 200, {
-                "service": "project-factory",
-                "status": "ok",
-                "engine": "project_factory",
-            })
+            send_json(self, 200, {"service": "project-factory", "status": "ok", "engine": "project_factory"})
             return
-
         if path == "/api/projects":
-            project_id = (parse_qs(urlparse(self.path).query).get("id") or [""])[0].strip()
-            if not project_id:
-                send_json(self, 400, {"status": "invalid_request", "error": "id is required"})
-                return
+            params = parse_qs(urlparse(self.path).query)
+            project_id = (params.get("id") or [""])[0].strip()
+            customer_id = (params.get("customerId") or [""])[0].strip()
             try:
-                snap = firestore_db().collection("projects").document(project_id).get()
-                if not snap.exists:
-                    send_json(self, 404, {"status": "not_found", "projectId": project_id})
+                db = firestore_db()
+                project = read_project(db, project_id) if project_id else read_latest(db, customer_id)
+                if not project:
+                    send_json(self, 404, {"status": "not_found", "error": "project not found"})
                     return
-                send_json(self, 200, {"status": "ok", "project": snap.to_dict()})
+                send_json(self, 200, {"status": "ok", "project": project})
             except RuntimeError as exc:
                 send_json(self, 503, {"status": "persistence_not_configured", "error": str(exc)})
             except Exception as exc:
                 send_json(self, 500, {"status": "error", "error": f"{type(exc).__name__}: {exc}"})
             return
-
         send_json(self, 404, {"status": "not_found", "path": path})
 
     def do_POST(self):
         path = urlparse(self.path).path.rstrip("/") or "/"
         if path in {"/api", "/"}:
-            send_json(self, 200, {
-                "service": "project-factory",
-                "status": "ok",
-                "engine": "project_factory",
-            })
+            send_json(self, 200, {"service": "project-factory", "status": "ok", "engine": "project_factory"})
             return
-
         if path == "/api/projects":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -149,7 +138,6 @@ class handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 send_json(self, 500, {"status": "error", "error": f"{type(exc).__name__}: {exc}"})
             return
-
         send_json(self, 404, {"status": "not_found", "path": path})
 
     def log_message(self, format, *args):
