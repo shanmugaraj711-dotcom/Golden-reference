@@ -8,8 +8,14 @@ from .model_provider import ModelRequest, ModelResponse, ModelProvider
 
 @dataclass(frozen=True)
 class RoutingPolicy:
+    """Runtime policy for choosing an AI provider.
+
+    The default is deliberately fail-closed: no paid/external provider can be
+    selected unless the operator explicitly raises the spending ceiling.
+    """
+
     prefer_local: bool = True
-    allow_external: bool = True
+    allow_external: bool = False
     max_cost: float = 0.0
 
 
@@ -19,6 +25,8 @@ class ModelRouter:
     def __init__(self, providers: Sequence[ModelProvider], policy: RoutingPolicy | None = None):
         self.providers = list(providers)
         self.policy = policy or RoutingPolicy()
+        if self.policy.max_cost < 0:
+            raise ValueError("max_cost cannot be negative")
 
     def complete(self, request: ModelRequest) -> ModelResponse:
         candidates = [p for p in self.providers if p.available()]
@@ -34,8 +42,13 @@ class ModelRouter:
         if eligible:
             return eligible[0].complete(request)
 
-        if self.policy.allow_external:
-            external = [p for p in candidates if not p.is_local()]
+        # External providers are never a silent escape hatch. They require
+        # both explicit opt-in and an explicit non-zero spending ceiling.
+        if self.policy.allow_external and self.policy.max_cost > 0:
+            external = [
+                p for p in candidates
+                if not p.is_local() and p.estimated_cost(request) <= self.policy.max_cost
+            ]
             if external:
                 return external[0].complete(request)
 
