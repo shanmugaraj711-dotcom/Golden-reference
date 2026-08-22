@@ -7,7 +7,7 @@ from typing import Literal
 # transfer = build, validate, and hand the project to the customer.
 # deploy = build, validate, and deliver a live deployed project.
 # managed = build, deploy, retain operational ownership, and maintain.
-# decide_later is retained as a backward-compatible internal option.
+# decide_later is retained only for backward-compatible internal callers.
 DeliveryMode = Literal["transfer", "deploy", "managed", "decide_later"]
 
 
@@ -43,6 +43,12 @@ def plan_delivery(request: DeliveryRequest) -> DeliveryPlan:
         raise ValueError("deploy_target must be vercel or none")
 
     mode = request.mode
+    # A customer-facing live deployment must never be reported as complete
+    # without an explicit hosting target. Transfer may be source-only because
+    # the customer's hosting destination can be established during handoff.
+    if mode in ("deploy", "managed") and request.deploy_target != "vercel":
+        raise ValueError(f"{mode} delivery requires an explicit Vercel target")
+
     return DeliveryPlan(
         project_name=request.project_name.strip(),
         mode=mode,
