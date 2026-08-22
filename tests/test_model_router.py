@@ -3,14 +3,15 @@ from project_factory.model_router import ModelRouter, RoutingPolicy
 
 
 class FakeProvider:
-    def __init__(self, name, local, cost):
+    def __init__(self, name, local, cost, available=True):
         self.name = name
         self.local = local
         self.cost = cost
+        self._available = available
         self.calls = 0
 
     def available(self):
-        return True
+        return self._available
 
     def is_local(self):
         return self.local
@@ -41,15 +42,15 @@ def test_external_provider_can_be_selected_when_policy_allows_it():
     assert external.calls == 1
 
 
-def test_external_fallback_is_allowed_when_local_exceeds_cost_ceiling():
-    local = FakeProvider("local", True, 0.0)
+def test_external_fallback_is_used_when_local_is_unavailable():
+    local = FakeProvider("local", True, 0.0, available=False)
     external = FakeProvider("external", False, 0.01)
     router = ModelRouter([local, external], RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.01))
     result = router.complete(ModelRequest("debug", "fix fixture"))
-    assert result.provider == "local"
+    assert result.provider == "external"
 
 
-def test_router_blocks_when_no_provider_meets_zero_cost_policy():
+def test_router_blocks_when_no_provider_meets_cost_ceiling():
     local = FakeProvider("local", True, 0.01)
     external = FakeProvider("external", False, 0.02)
     router = ModelRouter([local, external], RoutingPolicy(prefer_local=True, allow_external=True, max_cost=0.0))
