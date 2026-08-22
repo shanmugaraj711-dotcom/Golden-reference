@@ -37,6 +37,8 @@
 - [x] Cost-ceiling routing tests
 - [x] CI workflow
 - [x] Non-negotiable quality gates
+- [x] Production Firestore write/read round-trip
+- [x] Dynamic dashboard reads persisted project state
 
 ## AI independence
 - [x] Vendor-neutral provider contract
@@ -61,6 +63,19 @@
 - [x] Launch gate documented
 - [ ] Live second-project execution: requires configured model runtime
 
+## Customer dashboard V3
+- [x] Firestore-backed project lookup
+- [x] Real project name, brief, version and delivery model
+- [x] Real lifecycle/progress state
+- [x] Real verification evidence fields
+- [x] Real repository/hosting/production evidence fields
+- [x] Ownership and maintenance sections
+- [x] Project ID and customer-safe state only
+- [x] Automatic dashboard refresh
+- [ ] Authenticated customer/project authorization boundary
+- [ ] Real delivery evidence populated by Factory delivery events
+- [ ] Preview approval/change-request persistence
+
 ## Infrastructure handoff — USER SIDE, LAST
 - [ ] Select compute environment
 - [ ] Install/pin approved open-weight coding model
@@ -79,6 +94,6 @@
 - Never promise platform ownership transfer before checking the platform's actual transfer rules.
 - Never store customer production credentials in the repository.
 
-## Hard truth
+## Current engineering checkpoint
 
-The customer delivery architecture is now defined. The remaining unchecked items require an actual inference runtime and real execution evidence. GitHub alone cannot execute an LLM, and documentation cannot substitute for a live end-to-end build.
+Firestore persistence is proven in production: project creation returned HTTP 201 and the same project was read back with HTTP 200. The V3 dashboard now consumes the persisted project record instead of hard-coded demo values. The next remaining engineering gates are authenticated project access, Factory-generated delivery evidence, customer approval/change-request persistence, and the live model/second-project execution path.
