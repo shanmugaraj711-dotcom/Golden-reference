@@ -1,4 +1,8 @@
-"""V3 project-record API backed by Golden Reference Firestore."""
+"""V3 project-record API backed by Golden Reference Firestore.
+
+This file is intentionally a dedicated Vercel function so /api/projects
+resolves independently from the /api health endpoint.
+"""
 from __future__ import annotations
 
 import json
