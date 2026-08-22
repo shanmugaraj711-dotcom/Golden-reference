@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-# "transfer" = build in the Factory environment, then hand the project to the customer.
-# "managed" = Factory retains operational ownership and provides ongoing maintenance.
-# "decide_later" = build in a controlled environment and defer the ownership decision.
-DeliveryMode = Literal["transfer", "managed", "decide_later"]
+# Customer-facing V2 models:
+# transfer = build, validate, and hand the project to the customer.
+# deploy = build, validate, and deliver a live deployed project.
+# managed = build, deploy, retain operational ownership, and maintain.
+# decide_later is retained as a backward-compatible internal option.
+DeliveryMode = Literal["transfer", "deploy", "managed", "decide_later"]
 
 
 @dataclass(frozen=True)
@@ -33,8 +35,8 @@ class DeliveryPlan:
 def plan_delivery(request: DeliveryRequest) -> DeliveryPlan:
     if not request.project_name.strip():
         raise ValueError("project_name is required")
-    if request.mode not in ("transfer", "managed", "decide_later"):
-        raise ValueError("mode must be transfer, managed, or decide_later")
+    if request.mode not in ("transfer", "deploy", "managed", "decide_later"):
+        raise ValueError("mode must be transfer, deploy, managed, or decide_later")
     if not request.source_artifact.strip():
         raise ValueError("source_artifact is required")
     if request.deploy_target not in ("vercel", "none"):
@@ -45,10 +47,10 @@ def plan_delivery(request: DeliveryRequest) -> DeliveryPlan:
         project_name=request.project_name.strip(),
         mode=mode,
         repository_required=True,
-        vercel_required=request.deploy_target == "vercel",
+        vercel_required=(request.deploy_target == "vercel" and mode in ("deploy", "managed")),
         customer_transfer_required=mode == "transfer",
         maintenance_expected=mode == "managed",
-        handoff_required=mode == "transfer",
+        handoff_required=mode in ("transfer", "deploy"),
         decision_deferred=mode == "decide_later",
         source_artifact=request.source_artifact.strip(),
     )
