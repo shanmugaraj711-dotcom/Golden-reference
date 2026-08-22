@@ -28,11 +28,14 @@
 - [x] Input validation fixture
 - [x] Agent adapter tests
 - [x] Runner integration test
+- [x] Local-provider contract tests
+- [x] Cost-ceiling routing tests
 - [x] CI workflow
 
 ## AI independence
 - [x] Vendor-neutral provider contract
 - [x] Model router architecture
+- [x] Self-hosted OpenAI-compatible local provider
 - [x] Local model target
 - [x] External model fallback
 - [x] Future in-house model boundary
@@ -46,10 +49,15 @@
 - [x] Second-project proof definition
 - [ ] Live second-project execution: requires configured model runtime
 
+## Infrastructure handoff
+- [ ] Select compute environment
+- [ ] Install/pin approved open-weight coding model
+- [ ] Expose private OpenAI-compatible endpoint
+- [ ] Configure model endpoint in runtime environment
+- [ ] Run local-model smoke test
+- [ ] Run second-project end-to-end proof
+- [ ] Measure real variable delivery cost
+
 ## Hard truth
 
-The software architecture is implemented as far as possible without choosing and provisioning paid/physical inference infrastructure. A Git repository cannot execute an LLM by itself. The remaining unchecked items are infrastructure-dependent, not missing design work.
-
-## Definition of complete for this repository milestone
-
-The repository is complete when the architecture, contracts, deterministic gates, adapters, safety boundaries, and reproducible test suite are present. Live model execution is an environment configuration step and must be verified with real runtime evidence before claiming production autonomy.
+The repository-side engineering is complete for the current milestone. The remaining unchecked items require an actual inference runtime and real execution evidence. GitHub alone cannot run an LLM.
