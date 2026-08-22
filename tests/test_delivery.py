@@ -33,6 +33,16 @@ def test_managed_delivery_enables_maintenance():
     assert plan.decision_deferred is False
 
 
+def test_deploy_without_live_target_is_rejected():
+    with pytest.raises(ValueError, match="deploy delivery requires"):
+        plan_delivery(DeliveryRequest("coffee-site", "deploy", "output.tgz", "none"))
+
+
+def test_managed_without_live_target_is_rejected():
+    with pytest.raises(ValueError, match="managed delivery requires"):
+        plan_delivery(DeliveryRequest("coffee-site", "managed", "output.tgz", "none"))
+
+
 def test_decide_later_remains_backward_compatible():
     plan = plan_delivery(DeliveryRequest("coffee-site", "decide_later", "output.tgz", "vercel"))
     assert plan.repository_required is True
