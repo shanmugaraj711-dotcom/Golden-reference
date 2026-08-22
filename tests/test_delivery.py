@@ -3,11 +3,21 @@ import pytest
 from src.project_factory.delivery import DeliveryRequest, plan_delivery
 
 
-def test_transfer_delivery_requires_handoff():
-    plan = plan_delivery(DeliveryRequest("coffee-site", "transfer", "output.tgz", "vercel"))
+def test_transfer_delivery_requires_handoff_without_factory_maintenance():
+    plan = plan_delivery(DeliveryRequest("coffee-site", "transfer", "output.tgz", "none"))
+    assert plan.repository_required is True
+    assert plan.vercel_required is False
+    assert plan.customer_transfer_required is True
+    assert plan.handoff_required is True
+    assert plan.maintenance_expected is False
+    assert plan.decision_deferred is False
+
+
+def test_deploy_delivery_requires_live_target_and_handoff():
+    plan = plan_delivery(DeliveryRequest("coffee-site", "deploy", "output.tgz", "vercel"))
     assert plan.repository_required is True
     assert plan.vercel_required is True
-    assert plan.customer_transfer_required is True
+    assert plan.customer_transfer_required is False
     assert plan.handoff_required is True
     assert plan.maintenance_expected is False
     assert plan.decision_deferred is False
@@ -23,10 +33,10 @@ def test_managed_delivery_enables_maintenance():
     assert plan.decision_deferred is False
 
 
-def test_decide_later_defers_ownership():
+def test_decide_later_remains_backward_compatible():
     plan = plan_delivery(DeliveryRequest("coffee-site", "decide_later", "output.tgz", "vercel"))
     assert plan.repository_required is True
-    assert plan.vercel_required is True
+    assert plan.vercel_required is False
     assert plan.customer_transfer_required is False
     assert plan.handoff_required is False
     assert plan.maintenance_expected is False
