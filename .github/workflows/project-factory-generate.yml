@@ -1,0 +1,49 @@
+name: Project Factory Generate
+
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: "Customer project request"
+        required: true
+        default: "Build a simple responsive coffee shop landing page with hero, menu, hours, and contact section."
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      FACTORY_REQUEST: ${{ inputs.request }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      FACTORY_WORKSPACE: generated-project
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Gemini secret
+        run: test -n "$GEMINI_API_KEY"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate project files
+        run: python scripts/gemini_project_worker.py
+
+      - name: Run generated-project validation
+        run: |
+          test -f generated-project/index.html || test -f generated-project/README.md
+          python -m compileall generated-project -q || true
+
+      - name: Package generated project
+        run: tar -czf project-factory-output.tgz -C generated-project .
+
+      - name: Upload generated project
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-factory-output
+          path: project-factory-output.tgz
+          if-no-files-found: error
