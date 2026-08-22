@@ -1,0 +1,11 @@
+{
+  "policy": "zero-cost-first",
+  "prefer_local": true,
+  "allow_external": false,
+  "max_cost": 0.0,
+  "notes": [
+    "No paid model fallback is permitted by default.",
+    "External inference requires explicit operator approval and a non-zero budget.",
+    "Local/self-hosted inference reports zero API/token billing; infrastructure cost is tracked separately."
+  ]
+}
