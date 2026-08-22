@@ -74,7 +74,12 @@ jobs:
           git commit -m "factory: deliver ${SAFE_NAME}"
           git push origin "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          gh pr create --base main --head "$BRANCH" --title "factory: deliver ${SAFE_NAME}" --body "Automated Project Factory V2 delivery. Generated, validated, and packaged by the Factory. Review before merging. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --draft
+          if gh pr create --base main --head "$BRANCH" --title "factory: deliver ${SAFE_NAME}" --body "Automated Project Factory V2 delivery. Generated, validated, and packaged by the Factory. Review before merging. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --draft; then
+            echo "pull_request_created=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "GitHub Actions cannot create PRs under the repository's current Actions policy. Branch publication succeeded; PR creation is handled by the connected delivery control."
+            echo "pull_request_created=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Package evidence
         run: tar -czf project-factory-v2-output.tgz -C generated-project .
