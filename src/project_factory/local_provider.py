@@ -12,12 +12,13 @@ from .model_provider import ModelRequest, ModelResponse
 class OpenAICompatibleLocalProvider:
     """Provider for a self-hosted OpenAI-compatible model endpoint.
 
-    This is intentionally runtime-agnostic: Ollama, llama.cpp servers, vLLM,
-    or another approved local inference service can sit behind the endpoint.
-    No third-party API key is required by this adapter.
+    The model weights stay outside GitHub. GitHub stores the provider code and
+    configuration contract; an approved runtime hosts the weights and exposes
+    this private endpoint. No third-party API key is required by this adapter.
     """
 
     endpoint: str = "http://127.0.0.1:11434/v1/chat/completions"
+    health_endpoint: str = "http://127.0.0.1:11434/"
     model: str = "local-coder"
     timeout_seconds: int = 120
     name: str = "local"
@@ -26,23 +27,37 @@ class OpenAICompatibleLocalProvider:
         return True
 
     def estimated_cost(self, request: ModelRequest) -> float:
-        # API/token billing is zero for a self-hosted endpoint. Infrastructure
-        # cost is tracked separately by the economics layer.
+        # No API/token billing for a self-hosted endpoint. Infrastructure cost
+        # is tracked separately by the economics layer.
         return 0.0
 
     def available(self) -> bool:
         try:
-            req = Request(self.endpoint, method="GET")
+            req = Request(self.health_endpoint, method="GET")
             with urlopen(req, timeout=2):
                 return True
-        except Exception:
+        except (OSError, URLError):
             return False
 
     def complete(self, request: ModelRequest) -> ModelResponse:
-        messages = [{"role": "system", "content": request.context.get("system", "You are the Project Factory local coding model.")},
-                    {"role": "user", "content": request.instruction}]
-        payload = json.dumps({"model": self.model, "messages": messages, "temperature": 0}).encode()
-        req = Request(self.endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        messages = [
+            {
+                "role": "system",
+                "content": request.context.get(
+                    "system", "You are the Project Factory local coding model."
+                ),
+            },
+            {"role": "user", "content": request.instruction},
+        ]
+        payload = json.dumps(
+            {"model": self.model, "messages": messages, "temperature": 0}
+        ).encode()
+        req = Request(
+            self.endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
             with urlopen(req, timeout=self.timeout_seconds) as response:
                 data = json.loads(response.read().decode())
@@ -52,7 +67,9 @@ class OpenAICompatibleLocalProvider:
         try:
             output = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError("Local model returned an invalid chat-completions response") from exc
+            raise RuntimeError(
+                "Local model returned an invalid chat-completions response"
+            ) from exc
 
         usage = data.get("usage") or {}
         return ModelResponse(
