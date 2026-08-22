@@ -9,8 +9,16 @@ The API key is server-side only. Nothing secret is stored in GitHub.
 from __future__ import annotations
 
 import json
-import os
+import sys
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+# Vercel executes this module from the repository root. Add the source tree
+# explicitly so the factory package is available without extra dependencies.
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from project_factory.gemini_provider import GeminiProvider
 from project_factory.model_provider import ModelRequest
@@ -26,10 +34,10 @@ def _response(status: int, payload: dict) -> dict:
 
 
 def _query(request) -> dict[str, list[str]]:
-    query = ""
     if isinstance(request, dict):
-        query = request.get("queryStringParameters", {}).get("prompt", "")
-        return {"prompt": [query] if isinstance(query, str) else []}
+        params = request.get("queryStringParameters") or {}
+        prompt = params.get("prompt", "")
+        return {"prompt": [prompt] if isinstance(prompt, str) else []}
     path = getattr(request, "path", "") or getattr(request, "url", "")
     return parse_qs(urlparse(path).query)
 
