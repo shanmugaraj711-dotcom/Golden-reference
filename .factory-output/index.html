@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brew & Bean Co. | Artisanal Coffee Shop</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header / Navbar -->
+    <header class="header">
+        <div class="nav-container">
+            <a href="#" class="logo">Brew & Bean</a>
+            <nav class="nav-menu" id="nav-menu">
+                <a href="#hero" class="nav-link">Home</a>
+                <a href="#menu" class="nav-link">Menu</a>
+                <a href="#hours" class="nav-link">Hours</a>
+                <a href="#contact" class="nav-link">Contact</a>
+            </nav>
+            <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero">
+        <div class="hero-content">
+            <h1>Wake Up to Perfection</h1>
+            <p>Handcrafted artisan coffee roasted locally with love, served in a warm and cozy atmosphere.</p>
+            <a href="#menu" class="btn">Explore Menu</a>
+        </div>
+    </section>
+
+    <!-- Menu Section -->
+    <section id="menu" class="menu">
+        <div class="container">
+            <div class="section-title">
+                <h2>Our Signature Menu</h2>
+                <p>Carefully curated drinks and fresh pastries to brighten your day</p>
+            </div>
+            <div class="menu-grid">
+                <div class="menu-card">
+                    <div class="menu-item-header">
+                        <h3>Espresso</h3>
+                        <span class="price">$3.00</span>
+                    </div>
+                    <p>Rich, bold, and perfectly extracted single or double shot.</p>
+                </div>
+                <div class="menu-card">
+                    <div class="menu-item-header">
+                        <h3>Caffè Latte</h3>
+                        <span class="price">$4.50</span>
+                    </div>
+                    <p>Smooth espresso combined with steamed milk and a light layer of foam.</p>
+                </div>
+                <div class="menu-card">
+                    <div class="menu-item-header">
+                        <h3>Cappuccino</h3>
+                        <span class="price">$4.25</span>
+                    </div>
+                    <p>Equal parts espresso, steamed milk, and velvety microfoam.</p>
+                </div>
+                <div class="menu-card">
+                    <div class="menu-item-header">
+                        <h3>Cold Brew</h3>
+                        <span class="price">$4.75</span>
+                    </div>
+                    <p>Steeped for 24 hours for a smooth, naturally sweet, low-acidity kick.</p>
+                </div>
+                <div class="menu-card">
+                    <div class="menu-item-header">
+                        <h3>Matcha Green Tea Latte</h3>
+                        <span class="price">$5.00</span>
+                    </div>
+                    <p>Ceremonial-grade Japanese matcha whisked with your choice of milk.</p>
+                </div>
+                <div class="menu-card">
+                    <div class="menu-item-header">
+                        <h3>Almond Croissant</h3>
+                        <span class="price">$3.75</span>
+                    </div>
+                    <p>Flaky, buttery pastry filled with rich almond frangipane.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Hours Section -->
+    <section id="hours" class="hours">
+        <div class="container">
+            <div class="hours-box">
+                <h2>Opening Hours</h2>
+                <p class="hours-subtitle">Come on in and grab a cup</p>
+                <ul class="hours-list">
+                    <li><span>Monday – Friday</span> <span>6:30 AM – 7:00 PM</span></li>
+                    <li><span>Saturday</span> <span>7:30 AM – 8:00 PM</span></li>
+                    <li><span>Sunday</span> <span>8:00 AM – 6:00 PM</span></li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <div class="container">
+            <div class="section-title">
+                <h2>Get in Touch</h2>
+                <p>We'd love to hear from you or see you at the shop</p>
+            </div>
+            <div class="contact-wrapper">
+                <div class="contact-info">
+                    <h3>Visit Us</h3>
+                    <p><strong>Address:</strong> 742 Evergreen Terrace, Coffeeville, CA 90210</p>
+                    <p><strong>Phone:</strong> (555) 123-4567</p>
+                    <p><strong>Email:</strong> hello@brewandbeanco.com</p>
+                </div>
+                <form class="contact-form" id="contact-form">
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        <input type="text" id="name" required placeholder="Your Name">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" required placeholder="Your Email">
+                    </div>
+                    <div class="form-group">
+                        <label for="message">Message</label>
+                        <textarea id="message" rows="4" required placeholder="How can we help you?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-submit">Send Message</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2023 Brew & Bean Co. All rights reserved.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
