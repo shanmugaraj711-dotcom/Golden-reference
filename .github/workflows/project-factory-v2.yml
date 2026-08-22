@@ -12,9 +12,9 @@ on:
         required: true
         default: "factory-demo"
       delivery_mode:
-        description: "transfer, managed, or demo"
+        description: "Customer model: transfer, deploy, or managed"
         required: true
-        default: "demo"
+        default: "deploy"
       destination_repo:
         description: "Optional destination repo owner/name"
         required: false
@@ -50,8 +50,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Gemini secret
-        run: test -n "$GEMINI_API_KEY"
+      - name: Validate inputs and Gemini secret
+        run: |
+          set -euo pipefail
+          test -n "$GEMINI_API_KEY"
+          case "$DELIVERY_MODE" in
+            transfer|deploy|managed) ;;
+            *) echo "Unsupported delivery mode: $DELIVERY_MODE"; exit 1 ;;
+          esac
+          test -n "$PROJECT_NAME"
+          test -n "$DESTINATION_BRANCH"
 
       - uses: actions/setup-python@v5
         with:
@@ -81,6 +89,9 @@ jobs:
               "gate":"passed",
               "destination_repo":os.environ.get("DESTINATION_REPO", ""),
               "destination_branch":os.environ["DESTINATION_BRANCH"],
+              "live_url":os.environ.get("DESTINATION_URL", ""),
+              "handoff_required":os.environ["DELIVERY_MODE"] in ("transfer", "deploy"),
+              "maintenance_expected":os.environ["DELIVERY_MODE"] == "managed",
               "files":files,
           }
           (root/"factory-manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf-8")
@@ -166,3 +177,5 @@ jobs:
           echo "destination_repo=${DESTINATION_REPO:-none}"
           echo "destination_branch=$DESTINATION_BRANCH"
           echo "destination_url=${DESTINATION_URL:-none}"
+          echo "handoff_required=$([ "$DELIVERY_MODE" = transfer ] || [ "$DELIVERY_MODE" = deploy ] && echo true || echo false)"
+          echo "maintenance_expected=$([ "$DELIVERY_MODE" = managed ] && echo true || echo false)"
