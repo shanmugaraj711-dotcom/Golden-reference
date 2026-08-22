@@ -7,6 +7,9 @@ name = "project-factory"
 version = "0.1.0"
 description = "Controlled, evidence-driven project automation engine"
 requires-python = ">=3.11"
+dependencies = [
+  "firebase-admin>=6.5,<7",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
