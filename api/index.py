@@ -26,6 +26,10 @@ async function load(){{try{{const q=projectId?"?id="+encodeURIComponent(projectI
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed=urlparse(self.path); path=parsed.path.rstrip("/") or "/"
+        # Serve the customer dashboard directly from the Python entrypoint.
+        # This avoids Vercel static-file/routing ambiguity for /dashboard.
+        if path=="/dashboard":
+            send_html(self,dashboard_html((parse_qs(parsed.query).get("projectId") or [""])[0].strip())); return
         if path=="/": send_html(self,dashboard_html((parse_qs(parsed.query).get("projectId") or [""])[0].strip())); return
         if path=="/api": send_json(self,200,{"service":"project-factory","status":"ok","engine":"project_factory"}); return
         if path=="/api/projects":
