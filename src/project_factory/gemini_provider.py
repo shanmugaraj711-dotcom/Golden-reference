@@ -14,8 +14,7 @@ class GeminiProvider:
     """Server-side Gemini API adapter using only the standard library.
 
     The API key is read from GEMINI_API_KEY and never stored in the repository.
-    Estimated cost is configurable so the router can enforce a zero-spend
-    policy for an approved free-tier model.
+    The model defaults to the current free-tier model exposed by the runtime.
     """
 
     api_key: str | None = None
@@ -26,7 +25,7 @@ class GeminiProvider:
 
     def __post_init__(self) -> None:
         self.api_key = self.api_key or os.getenv("GEMINI_API_KEY")
-        self.model = self.model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+        self.model = self.model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     def is_local(self) -> bool:
         return False
