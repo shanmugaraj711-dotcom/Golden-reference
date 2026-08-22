@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Project Factory Output",
+  "type": "object",
+  "required": ["projectId", "productType", "deliveryMode", "artifacts", "acceptance", "verification", "ownership"],
+  "properties": {
+    "projectId": {"type": "string", "minLength": 1},
+    "productType": {"type": "string", "enum": ["web", "api", "android", "ios", "saas", "automation", "other"]},
+    "deliveryMode": {"type": "string", "enum": ["managed", "handover", "hybrid"]},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "status"],
+        "properties": {
+          "type": {"type": "string"},
+          "status": {"type": "string", "enum": ["ready", "blocked", "not_applicable"]},
+          "location": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "acceptance": {"type": "object", "required": ["passed"], "properties": {"passed": {"type": "boolean"}, "criteria": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false},
+    "verification": {"type": "object", "required": ["passed", "evidence"], "properties": {"passed": {"type": "boolean"}, "evidence": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false},
+    "ownership": {"type": "object", "required": ["mode", "customerActionRequired"], "properties": {"mode": {"type": "string"}, "customerActionRequired": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false}
+  },
+  "additionalProperties": false
+}
