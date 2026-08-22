@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Project Factory — Customer Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="top"><div><div class="eyebrow">PROJECT FACTORY</div><h1>Customer Delivery</h1><p>One place to review, approve and track your project.</p></div><span id="status" class="pill live">LIVE</span></header>
+    <section class="hero"><div><span class="label">PROJECT</span><h2>Factory Demo Website</h2><p>Version 1.0 · Build &amp; Deploy</p></div><a class="button" href="#delivery">View delivery</a></section>
+    <section class="grid">
+      <article class="card"><span class="label">PROGRESS</span><div class="progress"><span></span></div><strong>8 / 8 steps complete</strong><p>Generation, quality gate, delivery and verification passed.</p></article>
+      <article class="card"><span class="label">DELIVERY MODEL</span><select id="mode"><option>Build &amp; Transfer</option><option selected>Build &amp; Deploy</option><option>Managed</option></select><p id="modeHelp">Live deployment plus customer handoff.</p></article>
+      <article class="card"><span class="label">VERIFICATION</span><ul><li>Artifact validated <b>✓</b></li><li>Manifest recorded <b>✓</b></li><li>Production deployed <b>✓</b></li><li>Live health check <b>✓</b></li></ul></article>
+    </section>
+    <section id="delivery" class="card delivery"><div><span class="label">DELIVERED</span><h3>Production is ready</h3><p>Repository and hosting ownership are recorded in the delivery manifest.</p></div><div class="actions"><button id="preview">Open preview</button><button id="handoff">View handoff</button></div></section>
+    <section class="timeline card"><span class="label">PROJECT TIMELINE</span><div class="steps"><div class="done">Intake</div><div class="done">Generate</div><div class="done">Review</div><div class="done">Deliver</div><div class="done">Verify</div><div class="current">Live</div></div></section>
+    <footer>Credentials and provider secrets are never displayed in the customer dashboard.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
