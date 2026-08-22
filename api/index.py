@@ -1,20 +1,19 @@
 """Vercel entrypoint for the Project Factory.
 
-GET /api -> health and configuration status (never exposes the key).
+GET /api -> health and configuration status.
 GET /api?prompt=... -> one controlled Gemini inference when configured.
 
-The API key is server-side only. Nothing secret is stored in GitHub.
+The API key is server-side only and is never stored in GitHub.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-# Vercel executes this module from the repository root. Add the source tree
-# explicitly so the factory package is available without extra dependencies.
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
@@ -25,44 +24,25 @@ from project_factory.model_provider import ModelRequest
 from project_factory.model_router import ModelRouter, RoutingPolicy
 
 
-def _response(status: int, payload: dict) -> dict:
-    return {
-        "statusCode": status,
-        "headers": {"Content-Type": "application/json", "Cache-Control": "no-store"},
-        "body": json.dumps(payload),
-    }
-
-
-def _query(request) -> dict[str, list[str]]:
-    if isinstance(request, dict):
-        params = request.get("queryStringParameters") or {}
-        prompt = params.get("prompt", "")
-        return {"prompt": [prompt] if isinstance(prompt, str) else []}
-    path = getattr(request, "path", "") or getattr(request, "url", "")
-    return parse_qs(urlparse(path).query)
-
-
-def app(request):
+def build_response(prompt: str) -> tuple[int, dict]:
     provider = GeminiProvider()
-    params = _query(request)
-    prompt = (params.get("prompt") or [""])[0].strip()
 
     if not prompt:
-        return _response(200, {
+        return 200, {
             "service": "project-factory",
             "status": "ok",
             "engine": "project_factory",
             "geminiConfigured": provider.available(),
             "model": provider.model,
             "spendCeiling": 0,
-        })
+        }
 
     if not provider.available():
-        return _response(503, {
+        return 503, {
             "service": "project-factory",
             "status": "blocked",
             "reason": "GEMINI_API_KEY is not configured",
-        })
+        }
 
     try:
         result = ModelRouter(
@@ -71,16 +51,18 @@ def app(request):
         ).complete(ModelRequest(
             task="factory-proof",
             instruction=prompt,
-            context={"system": "You are the Project Factory proof worker. Return a concise, useful response."},
+            context={
+                "system": "You are the Project Factory proof worker. Return a concise, useful response."
+            },
         ))
     except Exception as exc:
-        return _response(502, {
+        return 502, {
             "service": "project-factory",
             "status": "model_error",
             "error": str(exc),
-        })
+        }
 
-    return _response(200, {
+    return 200, {
         "service": "project-factory",
         "status": "ok",
         "provider": result.provider,
@@ -91,7 +73,25 @@ def app(request):
             "outputTokens": result.output_tokens,
         },
         "estimatedCost": result.estimated_cost,
-    })
+    }
 
 
-handler = app
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        query = parse_qs(urlparse(self.path).query)
+        prompt = (query.get("prompt") or [""])[0].strip()
+        status, payload = build_response(prompt)
+        body = json.dumps(payload).encode("utf-8")
+
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        self.do_GET()
+
+    def log_message(self, format, *args):
+        return
