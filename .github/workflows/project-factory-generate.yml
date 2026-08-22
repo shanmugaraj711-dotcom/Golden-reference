@@ -33,10 +33,22 @@ jobs:
       - name: Generate project files
         run: python scripts/gemini_project_worker.py
 
-      - name: Run generated-project validation
+      - name: Run generated-project build gate
+        run: python scripts/project_gate.py
+
+      - name: Create delivery manifest
         run: |
-          test -f generated-project/index.html || test -f generated-project/README.md
-          python -m compileall generated-project -q || true
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path("generated-project")
+          files = []
+          for p in sorted(x for x in root.rglob("*") if x.is_file()):
+              data = p.read_bytes()
+              files.append({"path": str(p.relative_to(root)), "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+          manifest = {"request": os.environ["FACTORY_REQUEST"], "model": os.environ["GEMINI_MODEL"], "gate": "passed", "files": files}
+          Path("generated-project/factory-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+          PY
 
       - name: Package generated project
         run: tar -czf project-factory-output.tgz -C generated-project .
