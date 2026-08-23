@@ -10,6 +10,22 @@
   <main class="shell">
     <header class="top"><div><div class="eyebrow">PROJECT FACTORY</div><h1>Customer Delivery</h1><p>Live project state and delivery evidence.</p></div><span id="status" class="pill live">CONNECTING</span></header>
     <section class="hero"><div><span class="label">PROJECT</span><h2 id="projectName">Loading project…</h2><p id="projectMeta">Reading Firestore</p></div><a id="liveButton" class="button" href="#delivery" hidden>View delivery</a></section>
+    <section class="card" id="founderControl">
+      <span class="label">FOUNDER / ADMIN CONTROL</span>
+      <p>Authenticated factory controls. The admin key is never displayed or stored.</p>
+      <div class="grid">
+        <input id="adminKey" type="password" autocomplete="current-password" placeholder="Founder admin key">
+        <input id="startStep" type="number" min="1" max="10" value="1">
+        <input id="endStep" type="number" min="1" max="10" value="10">
+        <select id="outputTarget"><option value="web">web</option><option value="android">android</option><option value="ios">ios</option><option value="other">other</option></select>
+      </div>
+      <input id="factoryInstruction" placeholder="Factory instruction">
+      <div class="grid">
+        <button id="startFactory" class="button">Start selected range</button>
+        <button id="refreshFactory" class="button">Refresh factory state</button>
+      </div>
+      <pre id="factoryResult">Enter the founder/admin key to use factory controls.</pre>
+    </section>
     <section class="grid">
       <article class="card"><span class="label">PROGRESS</span><div class="progress"><span id="progressBar"></span></div><strong id="progressText">Loading…</strong><p id="nextAction">Factory state is being loaded.</p></article>
       <article class="card"><span class="label">DELIVERY MODEL</span><strong id="deliveryModel">—</strong><p id="modeHelp">—</p></article>
