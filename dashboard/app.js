@@ -8,73 +8,18 @@ const esc=(value)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 const params=new URLSearchParams(location.search);
 const projectId=params.get('projectId')||params.get('id');
 const customerId=params.get('customerId');
+let activeProjectId=projectId;
 const endpoint=projectId?`/api/projects?id=${encodeURIComponent(projectId)}`:customerId?`/api/projects?customerId=${encodeURIComponent(customerId)}`:'/api/projects';
-
 const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value??'—'};
 const setLink=(id,url)=>{const el=document.getElementById(id);if(!el)return;if(url){el.href=url;el.hidden=false}else el.hidden=true};
-
 function stateLabel(state){return String(state||'').replaceAll('_',' ')}
-
-// Keep the customer dashboard lifecycle exactly aligned with the production API.
 const states=['INTAKE','BUILDING','VERIFYING','READY','DELIVERED'];
-
-function timeline(state){
-  const current=states.indexOf(state);
-  document.getElementById('timeline').innerHTML=states.map((s,i)=>`<div class="${i<current?'done':i===current?'current':''}">${esc(stateLabel(s))}</div>`).join('');
-}
-
-function progress(state){
-  const i=Math.max(0,states.indexOf(state));
-  const pct=Math.round(((i+1)/states.length)*100);
-  document.getElementById('progressBar').style.width=`${pct}%`;
-  setText('progressText',`${i+1} / ${states.length} lifecycle stages reached`);
-}
-
-function statusClass(state){
-  return state==='DELIVERED'||state==='READY'?'pill live':state==='VERIFYING'||state==='BUILDING'?'pill':'pill';
-}
-
-async function loadProject(){
-  try{
-    const response=await fetch(endpoint,{cache:'no-store'});
-    const data=await response.json();
-    if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
-    const p=data.project||{};
-    const v=p.verification||{};
-    const o=p.ownership||{};
-    const m=p.maintenance||{};
-    const state=String(p.lifecycleState||'INTAKE').toUpperCase();
-    setText('status',stateLabel(state));
-    document.getElementById('status').className=statusClass(state);
-    setText('projectName',p.projectName||'Unnamed project');
-    setText('projectMeta',`Version ${p.currentVersion||'—'} · ${stateLabel(p.deliveryModel||'—')}`);
-    setText('deliveryModel',stateLabel(p.deliveryModel||'—'));
-    setText('modeHelp',help[p.deliveryModel]||'Factory delivery state.');
-    setText('nextAction',p.nextCustomerAction||'No customer action recorded.');
-    setText('qualityGate',v.qualityGate||'PENDING');
-    setText('deployment',v.deployment||'PENDING');
-    setText('healthCheck',v.healthCheck||'PENDING');
-    setText('deliveryTitle',p.productionUrl?'Production delivery available':'Delivery evidence in progress');
-    setText('deliveryEvidence',`Repository: ${p.repository||'PENDING'} · Hosting: ${p.hostingTarget||'PENDING'} · Production: ${p.productionUrl||'PENDING'}`);
-    setText('repoOwnership',o.repository||'PENDING');
-    setText('hostingOwnership',o.hosting||'PENDING');
-    setText('handoffOwnership',o.handoff||'PENDING');
-    setText('maintenanceStatus',m.status||'NOT_ENROLLED');
-    setText('maintenanceVersion',`Current version: ${m.currentVersion||p.currentVersion||'—'}`);
-    setText('recentChanges',m.recentChanges?.length?`Recent changes: ${m.recentChanges.join(', ')}`:'No recent changes recorded.');
-    setText('projectId',p.projectId||'—');
-    setText('brief',p.brief||'—');
-    setLink('preview',p.previewUrl);
-    setLink('production',p.productionUrl);
-    progress(state);
-    timeline(state);
-  }catch(error){
-    setText('status','ERROR');
-    document.getElementById('status').className='pill';
-    setText('projectName','Project unavailable');
-    setText('projectMeta',error.message);
-    setText('progressText','Unable to load Factory state');
-  }
-}
-loadProject();
-setInterval(loadProject,30000);
+function timeline(state){const current=states.indexOf(state);document.getElementById('timeline').innerHTML=states.map((s,i)=>`<div class="${i<current?'done':i===current?'current':''}">${esc(stateLabel(s))}</div>`).join('')}
+function progress(state){const i=Math.max(0,states.indexOf(state));const pct=Math.round(((i+1)/states.length)*100);document.getElementById('progressBar').style.width=`${pct}%`;setText('progressText',`${i+1} / ${states.length} lifecycle stages reached`)}
+function statusClass(state){return state==='DELIVERED'||state==='READY'?'pill live':'pill'}
+function history(p){const approvals=p.approvals||[];const changes=p.changeRequests||[];setText('approvalHistory',approvals.length?`Approvals: ${approvals.map(a=>`${a.decision} · ${a.version}`).join(' | ')}`:'No approvals recorded.');setText('changeHistory',changes.length?`Change requests: ${changes.map(c=>`${c.status} · ${c.request}`).join(' | ')}`:'No change requests recorded.')}
+async function loadProject(){try{const response=await fetch(endpoint,{cache:'no-store'});const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);const p=data.project||{};activeProjectId=p.projectId||activeProjectId;const v=p.verification||{};const o=p.ownership||{};const m=p.maintenance||{};const state=String(p.lifecycleState||'INTAKE').toUpperCase();setText('status',stateLabel(state));document.getElementById('status').className=statusClass(state);setText('projectName',p.projectName||'Unnamed project');setText('projectMeta',`Version ${p.currentVersion||'—'} · ${stateLabel(p.deliveryModel||'—')}`);setText('deliveryModel',stateLabel(p.deliveryModel||'—'));setText('modeHelp',help[p.deliveryModel]||'Factory delivery state.');setText('nextAction',p.nextCustomerAction||'No customer action recorded.');setText('qualityGate',v.qualityGate||'PENDING');setText('deployment',v.deployment||'PENDING');setText('healthCheck',v.healthCheck||'PENDING');setText('deliveryTitle',p.productionUrl?'Production delivery available':'Delivery evidence in progress');setText('deliveryEvidence',`Repository: ${p.repository||'PENDING'} · Hosting: ${p.hostingTarget||'PENDING'} · Production: ${p.productionUrl||'PENDING'}`);setText('repoOwnership',o.repository||'PENDING');setText('hostingOwnership',o.hosting||'PENDING');setText('handoffOwnership',o.handoff||'PENDING');setText('maintenanceStatus',m.status||'NOT_ENROLLED');setText('maintenanceVersion',`Current version: ${m.currentVersion||p.currentVersion||'—'}`);setText('recentChanges',m.recentChanges?.length?`Recent changes: ${m.recentChanges.join(', ')}`:'No recent changes recorded.');setText('projectId',p.projectId||'—');setText('brief',p.brief||'—');setLink('preview',p.previewUrl);setLink('production',p.productionUrl);setText('actionMessage',p.nextCustomerAction||'Actions are recorded against this project version.');progress(state);timeline(state);history(p)}catch(error){setText('status','ERROR');document.getElementById('status').className='pill';setText('projectName','Project unavailable');setText('projectMeta',error.message);setText('progressText','Unable to load Factory state')}}
+async function postAction(payload){if(!activeProjectId)throw new Error('Project is not loaded');const response=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,projectId:activeProjectId,version:document.getElementById('projectMeta').textContent.split('·')[0].replace('Version ','').trim()})});const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);return data}
+document.getElementById('approvalForm').addEventListener('submit',async e=>{e.preventDefault();try{const data=await postAction({action:'approve',decision:'APPROVED',comment:document.getElementById('approvalComment').value});setText('actionMessage','Approval recorded successfully.');document.getElementById('approvalComment').value='';history(data.project);await loadProject()}catch(err){setText('actionMessage',`Unable to record approval: ${err.message}`)}});
+document.getElementById('changeRequestForm').addEventListener('submit',async e=>{e.preventDefault();try{const data=await postAction({action:'change_request',request:document.getElementById('changeRequest').value});setText('actionMessage','Change request recorded successfully.');document.getElementById('changeRequest').value='';history(data.project);await loadProject()}catch(err){setText('actionMessage',`Unable to record change request: ${err.message}`)}});
+loadProject();setInterval(loadProject,30000);
