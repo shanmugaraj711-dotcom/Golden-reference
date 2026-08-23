@@ -72,10 +72,13 @@ def test_checkpoint_resume_skips_completed_work():
     first_result = factory.run()
     checkpoint = first_result.state.checkpoint
 
+    assert checkpoint["evidence"]
+
     resumed = ProjectFactory("run-5", "fixture-resume", max_repairs=1)
     resumed.add_task(Task("first", "First", lambda: calls.__setitem__("first", calls["first"] + 1) or True))
     resumed.add_task(Task("second", "Second", lambda: calls.__setitem__("second", calls["second"] + 1) or True))
     resumed.resume_from_checkpoint(checkpoint)
+    assert len(resumed.state.evidence) == len(checkpoint["evidence"])
     second_result = resumed.run()
 
     assert second_result.status is Status.COMPLETE
