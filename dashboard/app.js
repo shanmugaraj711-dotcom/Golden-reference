@@ -14,17 +14,24 @@ const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textCon
 const setLink=(id,url)=>{const el=document.getElementById(id);if(!el)return;if(url){el.href=url;el.hidden=false}else el.hidden=true};
 
 function stateLabel(state){return String(state||'').replaceAll('_',' ')}
+
+// Keep the customer dashboard lifecycle exactly aligned with the production API.
+const states=['INTAKE','BUILDING','VERIFYING','READY','DELIVERED'];
+
 function timeline(state){
-  const states=['INTAKE','PLANNING','GENERATING','REVIEW','APPROVED','DELIVERING','VERIFYING','LIVE','HANDED_OFF','MANAGED'];
   const current=states.indexOf(state);
   document.getElementById('timeline').innerHTML=states.map((s,i)=>`<div class="${i<current?'done':i===current?'current':''}">${esc(stateLabel(s))}</div>`).join('');
 }
+
 function progress(state){
-  const states=['INTAKE','PLANNING','GENERATING','REVIEW','APPROVED','DELIVERING','VERIFYING','LIVE','HANDED_OFF','MANAGED'];
   const i=Math.max(0,states.indexOf(state));
   const pct=Math.round(((i+1)/states.length)*100);
   document.getElementById('progressBar').style.width=`${pct}%`;
   setText('progressText',`${i+1} / ${states.length} lifecycle stages reached`);
+}
+
+function statusClass(state){
+  return state==='DELIVERED'||state==='READY'?'pill live':state==='VERIFYING'||state==='BUILDING'?'pill':'pill';
 }
 
 async function loadProject(){
@@ -36,8 +43,9 @@ async function loadProject(){
     const v=p.verification||{};
     const o=p.ownership||{};
     const m=p.maintenance||{};
-    setText('status','LIVE');
-    document.getElementById('status').className='pill live';
+    const state=String(p.lifecycleState||'INTAKE').toUpperCase();
+    setText('status',stateLabel(state));
+    document.getElementById('status').className=statusClass(state);
     setText('projectName',p.projectName||'Unnamed project');
     setText('projectMeta',`Version ${p.currentVersion||'—'} · ${stateLabel(p.deliveryModel||'—')}`);
     setText('deliveryModel',stateLabel(p.deliveryModel||'—'));
@@ -58,8 +66,8 @@ async function loadProject(){
     setText('brief',p.brief||'—');
     setLink('preview',p.previewUrl);
     setLink('production',p.productionUrl);
-    progress(p.lifecycleState);
-    timeline(p.lifecycleState);
+    progress(state);
+    timeline(state);
   }catch(error){
     setText('status','ERROR');
     document.getElementById('status').className='pill';
