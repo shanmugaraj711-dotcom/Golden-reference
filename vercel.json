@@ -16,6 +16,8 @@
   ],
   "rewrites": [
     { "source": "/dashboard", "destination": "/dashboard/index.html" },
-    { "source": "/dashboard/", "destination": "/dashboard/index.html" }
+    { "source": "/dashboard/", "destination": "/dashboard/index.html" },
+    { "source": "/factory-admin", "destination": "/factory-admin.html" },
+    { "source": "/factory-admin/", "destination": "/factory-admin.html" }
   ]
 }
