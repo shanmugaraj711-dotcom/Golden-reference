@@ -12,10 +12,6 @@ def send_json(request, status, payload):
 def send_html(request, html):
     body=html.encode("utf-8"); request.send_response(200); request.send_header("Content-Type","text/html; charset=utf-8"); request.send_header("Cache-Control","no-store"); request.send_header("Content-Length",str(len(body))); request.end_headers(); request.wfile.write(body)
 
-def firestore_db():
-    from project_factory_firestore import firestore_db as get_db
-    return get_db()
-
 def dashboard_html(project_id=""):
     safe_id=json.dumps(project_id)
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Factory — Customer Delivery</title><style>:root{{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f5f7fb}}*{{box-sizing:border-box}}body{{margin:0}}.shell{{max-width:1100px;margin:auto;padding:36px 20px 60px}}.top{{display:flex;justify-content:space-between;align-items:flex-start}}.eyebrow,.label{{font-size:12px;letter-spacing:.12em;font-weight:800;color:#667085}}h1{{margin:4px 0 6px;font-size:34px}}h2{{font-size:28px;margin:8px 0}}h3{{margin:5px 0 8px}}p{{color:#667085;line-height:1.5}}.pill{{padding:8px 12px;border-radius:999px;background:#e8f7ee;color:#177245;font-size:12px;font-weight:800}}.hero,.card{{background:white;border:1px solid #e6e9ef;border-radius:18px;box-shadow:0 5px 20px #1720330a}}.hero{{padding:28px;margin:24px 0}}.grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}}.card{{padding:22px}}.progress{{height:10px;background:#edf0f5;border-radius:99px;margin:15px 0 10px;overflow:hidden}}.progress span{{display:block;height:100%;width:10%;background:#2463eb;border-radius:99px}}ul{{padding-left:20px;line-height:2}}b{{float:right}}code{{word-break:break-all}}.delivery{{margin:16px 0}}.steps{{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}}.step{{padding:9px 12px;border-radius:10px;background:#f0f2f6;font-size:13px}}.done{{background:#e8f7ee;color:#177245}}footer{{text-align:center;color:#98a2b3;font-size:12px;margin-top:30px}}@media(max-width:760px){{.grid{{grid-template-columns:1fr}}}}</style></head><body><main class="shell"><header class="top"><div><div class="eyebrow">PROJECT FACTORY</div><h1>Customer Delivery</h1><p>Live project state and delivery evidence.</p></div><span id="status" class="pill">CONNECTING</span></header><section class="hero"><div class="label">PROJECT</div><h2 id="name">Loading project…</h2><p id="meta">Reading Firestore</p></section><section class="grid"><article class="card"><div class="label">PROGRESS</div><div class="progress"><span id="bar"></span></div><strong id="progress">Loading…</strong><p id="next">—</p></article><article class="card"><div class="label">DELIVERY MODEL</div><h3 id="model">—</h3><p id="mode">—</p></article><article class="card"><div class="label">VERIFICATION</div><ul><li>Quality gate <b id="quality">—</b></li><li>Deployment <b id="deployment">—</b></li><li>Health check <b id="health">—</b></li></ul></article></section><section class="card delivery"><div class="label">DELIVERY EVIDENCE</div><h3 id="delivery">Loading…</h3><p id="evidence">—</p></section><section class="grid"><article class="card"><div class="label">OWNERSHIP</div><ul><li>Repository <b id="repo">—</b></li><li>Hosting <b id="hosting">—</b></li><li>Handoff <b id="handoff">—</b></li></ul></article><article class="card"><div class="label">MAINTENANCE</div><h3 id="maint">—</h3><p id="version">—</p><p id="changes">—</p></article><article class="card"><div class="label">PROJECT ID</div><code id="pid">—</code><p id="brief">—</p></article></section><section class="card"><div class="label">PROJECT TIMELINE</div><div id="timeline" class="steps"></div></section><footer>Credentials and provider secrets are never displayed in the customer dashboard.</footer></main><script>
@@ -26,20 +22,20 @@ async function load(){{try{{const q=projectId?"?id="+encodeURIComponent(projectI
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed=urlparse(self.path); path=parsed.path.rstrip("/") or "/"
-        # Serve the customer dashboard directly from the Python entrypoint.
-        # This avoids Vercel static-file/routing ambiguity for /dashboard.
-        if path=="/dashboard":
+        if path in ("/dashboard","/"):
             send_html(self,dashboard_html((parse_qs(parsed.query).get("projectId") or [""])[0].strip())); return
-        if path=="/": send_html(self,dashboard_html((parse_qs(parsed.query).get("projectId") or [""])[0].strip())); return
         if path=="/api": send_json(self,200,{"service":"project-factory","status":"ok","engine":"project_factory"}); return
         if path=="/api/projects":
             try:
-                from api.projects import db,read,normalise
+                from api.projects import db,read,normalise,STATES
                 q=parse_qs(parsed.query); pid=(q.get("id") or [""])[0].strip(); cid=(q.get("customerId") or [""])[0].strip(); store=db(); p=read(store,pid) if pid else None
                 if not p and cid:
                     docs=list(store.collection("projects").where("customerId","==",cid).order_by("createdAt",direction="DESCENDING").limit(1).stream()); p=docs[0].to_dict() if docs else None
+                # Direct dashboard/API requests with no selector use the newest project.
+                if not p and not pid and not cid:
+                    docs=list(store.collection("projects").order_by("createdAt",direction="DESCENDING").limit(1).stream()); p=docs[0].to_dict() if docs else None
                 if not p: send_json(self,404,{"status":"not_found","error":"project not found"}); return
-                send_json(self,200,{"status":"ok","project":normalise(p),"lifecycleStates":["INTAKE","BUILDING","VERIFYING","READY","DELIVERED"]})
+                send_json(self,200,{"status":"ok","project":normalise(p),"lifecycleStates":STATES})
             except Exception as e: send_json(self,503 if "firebase" in str(e).lower() else 500,{"status":"error","error":f"{type(e).__name__}: {e}"})
             return
         send_json(self,404,{"status":"not_found","path":path})
