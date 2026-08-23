@@ -1,9 +1,7 @@
-"""Session-oriented founder authentication boundary.
+"""Founder/admin session authentication.
 
-This endpoint deliberately does not store passwords or secrets in source. It
-expects the identity provider to assert a verified founder identity through
-OIDC headers supplied by the hosting/auth layer, then issues a short-lived,
-HTTP-only session cookie backed by a signed token secret.
+The Vercel FACTORY_ADMIN_KEY is used only to establish a short-lived,
+HTTP-only session. The secret is never returned to the browser or stored.
 """
 from __future__ import annotations
 
@@ -29,28 +27,25 @@ def sign(payload: str) -> str:
     return b64(hmac.new(secret, payload.encode(), hashlib.sha256).digest())
 
 
-def verified_identity(handler: BaseHTTPRequestHandler) -> str:
-    """Accept only an identity asserted by the configured auth gateway."""
-    subject = handler.headers.get("X-Verified-User", "").strip()
-    role = handler.headers.get("X-Verified-Role", "").strip().lower()
-    founder = os.environ.get("FOUNDER_IDENTITY", "").strip()
-    if not subject or not founder or not hmac.compare_digest(subject, founder):
-        raise PermissionError("founder authentication required")
-    if role not in {"founder", "admin"}:
-        raise PermissionError("founder/admin role required")
-    return subject
+def verify_admin_key(handler: BaseHTTPRequestHandler) -> None:
+    expected = os.environ.get("FACTORY_ADMIN_KEY", "").strip()
+    supplied = handler.headers.get("X-Factory-Admin-Key", "").strip()
+    if not expected:
+        raise RuntimeError("FACTORY_ADMIN_KEY is not configured")
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        raise PermissionError("founder/admin authentication required")
 
 
-def issue_session(subject: str) -> str:
-    payload = b64(json.dumps({"sub": subject, "role": "founder", "exp": int(time.time()) + SESSION_TTL}, separators=(",", ":")).encode())
+def issue_session() -> str:
+    payload = b64(json.dumps({"role": "founder", "exp": int(time.time()) + SESSION_TTL}, separators=(",", ":")).encode())
     return f"{payload}.{sign(payload)}"
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            subject = verified_identity(self)
-            token = issue_session(subject)
+            verify_admin_key(self)
+            token = issue_session()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
