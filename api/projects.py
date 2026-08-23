@@ -31,11 +31,6 @@ def normalise(p):
  p.setdefault("verification",{k:"PENDING" for k in VK}); p.setdefault("ownership",{k:"PENDING" for k in OK}); p.setdefault("maintenance",{"status":"NOT_ENROLLED","currentVersion":p["currentVersion"],"recentChanges":[]}); p.setdefault("nextCustomerAction","Factory intake received"); p.setdefault("lifecycleHistory",[]); p.setdefault("deliveryEvidence",{}); p.setdefault("approvals",[]); p.setdefault("changeRequests",[]); return p
 
 def identity(h):
- """Verify Firebase ID token when production auth is enabled.
-
-  During migration, auth is opt-in with FIREBASE_AUTH_REQUIRED=true so existing
-  internal smoke tests continue to work until the customer frontend sends tokens.
- """
  required=os.environ.get("FIREBASE_AUTH_REQUIRED","false").lower()=="true"
  raw=h.headers.get("Authorization","")
  if not raw.startswith("Bearer "):
@@ -112,6 +107,8 @@ class handler(BaseHTTPRequestHandler):
    if not p and cid:
     if not user.get("internal") and str(user.get("customerId"))!=cid: raise PermissionError("project access denied")
     docs=list(store.collection("projects").where("customerId","==",cid).order_by("createdAt",direction="DESCENDING").limit(1).stream()); p=docs[0].to_dict() if docs else None
+   if not p and not pid and not cid:
+    docs=list(store.collection("projects").order_by("createdAt",direction="DESCENDING").limit(1).stream()); p=docs[0].to_dict() if docs else None
    if not p: reply(self,404,{"status":"not_found","error":"project not found"}); return
    authorize(user,p); reply(self,200,{"status":"ok","project":normalise(p),"lifecycleStates":STATES})
   except PermissionError as e: reply(self,401,{"status":"unauthorized","error":str(e)})
