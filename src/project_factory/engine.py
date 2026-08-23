@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
@@ -100,7 +100,8 @@ class ProjectFactory:
             "activeTask": self.state.active_task,
             "completedTasks": list(self.state.completed_tasks),
             "failedTasks": list(self.state.failed_tasks),
-            "evidenceCount": len(self.state.evidence),
+            "blockedReason": self.state.blocked_reason,
+            "evidence": [asdict(item) for item in self.state.evidence],
         }
         self._record(Stage.CHECKPOINT, "persist", "passed")
 
@@ -112,8 +113,12 @@ class ProjectFactory:
         self.state.active_task = checkpoint.get("activeTask") or None
         self.state.completed_tasks = list(checkpoint.get("completedTasks", []))
         self.state.failed_tasks = list(checkpoint.get("failedTasks", []))
+        self.state.blocked_reason = checkpoint.get("blockedReason") or None
+        raw_evidence = checkpoint.get("evidence", [])
+        self.state.evidence = [Evidence(**item) for item in raw_evidence if isinstance(item, dict)]
 
     def run(self) -> RunResult:
+        self.state.status = Status.RUNNING
         self.state.stage = Stage.SPECIFY
         self._record(Stage.SPECIFY, "normalize_request", "passed")
         self.state.stage = Stage.PLAN
