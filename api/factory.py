@@ -71,6 +71,15 @@ def load(project_id: str):
     return snap.to_dict() or {}
 
 
+def next_version(current: str) -> str:
+    parts = str(current or "0.1.0").split(".")
+    try:
+        major, minor, patch = (int(parts[i]) for i in range(3))
+    except (ValueError, IndexError):
+        return "0.2.0"
+    return f"{major}.{minor + 1}.0" if patch >= 0 else "0.2.0"
+
+
 def control_state(project_id: str, project: dict):
     state = dict(project.get("factoryControl") or {})
     state.setdefault("status", "IDLE")
@@ -104,7 +113,7 @@ def command(project_id: str, data: dict):
         if not instruction:
             raise ValueError("instruction is required")
         target = str(data.get("outputTarget") or "web").strip().lower()
-        version = f"{float(str(project.get('currentVersion', '0.1.0')).split('.')[0]) + 1:.1f}.0" if action == "revise" else str(project.get("currentVersion", "0.1.0"))
+        version = next_version(str(project.get("currentVersion", "0.1.0"))) if action == "revise" else str(project.get("currentVersion", "0.1.0"))
         item = {
             "id": f"cmd_{uuid4().hex}",
             "action": action,
@@ -141,11 +150,15 @@ def command(project_id: str, data: dict):
     elif action == "checkpoint":
         stage = int(data.get("stage", 1))
         validate_range(stage, stage)
+        start = int(state.get("startStep", 1))
+        end = int(state.get("endStep", 10))
+        if stage < start or stage > end:
+            raise ValueError(f"checkpoint stage must be between {start} and {end}")
         evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
         state.update({"status": "RUNNING", "currentStage": stage, "evidence": evidence, "updatedAt": now})
         if state.get("lastCommand"):
             last = dict(state["lastCommand"])
-            if stage >= int(last.get("endStep", 10)):
+            if stage == int(last.get("endStep", end)):
                 last["status"] = "COMPLETED"
                 last["completedAt"] = now
                 state["lastCommand"] = last
