@@ -1,7 +1,7 @@
 import { firestoreGet, firestorePatch, jsonResponse, normalizeProject, requireAdmin } from "../_lib.js";
 
 const STEPS = Array.from({ length: 10 }, (_, i) => i + 1);
-const ACTIONS = new Set(["start", "revise", "pause", "resume", "approve", "claim", "checkpoint"]);
+const ACTIONS = new Set(["start", "revise", "pause", "resume", "approve", "claim", "checkpoint", "configure-destination"]);
 
 function controlState(pid, project) {
   const s = { ...(project.factoryControl || {}) };
@@ -28,6 +28,20 @@ async function command(env, pid, data) {
   const now = new Date().toISOString();
   const queue = [...(state.queue || [])];
   const history = [...(state.history || [])];
+
+  if (action === "configure-destination") {
+    const repo = String(data.destinationRepo || "").trim();
+    const branch = String(data.destinationBranch || "main").trim() || "main";
+    const productionUrl = String(data.productionUrl || "").trim();
+    const previewUrl = String(data.previewUrl || "").trim();
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) throw new Error("destinationRepo must be owner/repository");
+    if (productionUrl && !/^https?:\/\//i.test(productionUrl)) throw new Error("productionUrl must be an http(s) URL");
+    if (previewUrl && !/^https?:\/\//i.test(previewUrl)) throw new Error("previewUrl must be an http(s) URL");
+    state.destinationRepo = repo; state.destinationBranch = branch; state.productionUrl = productionUrl; state.previewUrl = previewUrl; state.updatedAt = now;
+    history.push({ action, at: now, stage: state.currentStage, status: state.status }); state.history = history.slice(-50);
+    await firestorePatch(env, pid, { destinationRepo: repo, destinationBranch: branch, productionUrl, previewUrl, factoryControl: state, updatedAt: now });
+    return jsonResponse({ status: "updated", factory: state });
+  }
 
   if (action === "start" || action === "revise") {
     const start = Number(data.startStep || 1), end = Number(data.endStep || 10);
@@ -86,7 +100,7 @@ export async function onRequestPost({ request, env }) {
   } catch (error) {
     if (error instanceof Response) return error;
     const message = String(error.message || error);
-    const status = message.includes("project not found") ? 404 : message.includes("required") || message.includes("valid range") || message.includes("unsupported") || message.includes("paused") || message.includes("queued") || message.includes("checkpoint") ? 400 : 503;
+    const status = message.includes("project not found") ? 404 : message.includes("required") || message.includes("valid range") || message.includes("unsupported") || message.includes("paused") || message.includes("queued") || message.includes("checkpoint") || message.includes("destinationRepo") || message.includes("productionUrl") || message.includes("previewUrl") ? 400 : 503;
     return jsonResponse({ status: status === 404 ? "not_found" : status === 400 ? "invalid_request" : "persistence_error", error: message }, status);
   }
 }
