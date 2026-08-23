@@ -42,6 +42,16 @@ class CodexCliAgent:
     sandbox: str = "workspace-write"
     model: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        if self.timeout_seconds > 3600:
+            raise ValueError("timeout_seconds exceeds the one-hour safety limit")
+        if self.sandbox != "workspace-write":
+            raise ValueError("CodexCliAgent only permits the workspace-write sandbox")
+        if not self.executable:
+            raise ValueError("Codex executable must not be empty")
+
     def _git(self, workspace: Path, *args: str) -> list[str]:
         result = subprocess.run(
             ["git", *args], cwd=workspace, capture_output=True, text=True, check=False
@@ -54,7 +64,11 @@ class CodexCliAgent:
         root = Path(workspace).resolve()
         if not root.is_dir():
             raise ValueError(f"Workspace does not exist: {root}")
-        self._git(root, "rev-parse", "--show-toplevel")
+        if not instruction.strip():
+            raise ValueError("Agent instruction must not be empty")
+        top_level = Path(self._git(root, "rev-parse", "--show-toplevel")[0]).resolve()
+        if top_level != root:
+            raise ValueError("Workspace must be the Git repository root")
         before = set(self._git(root, "status", "--porcelain=v1", "--untracked-files=all"))
 
         command = [*self.executable, "--ephemeral", "--sandbox", self.sandbox, "--json"]
