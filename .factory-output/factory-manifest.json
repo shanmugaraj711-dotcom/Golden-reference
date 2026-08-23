@@ -1,0 +1,22 @@
+{
+  "request": "Build a simple responsive coffee shop landing page with hero, menu, hours, and contact section.",
+  "model": "gemini-3.5-flash-lite",
+  "gate": "passed",
+  "files": [
+    {
+      "path": "index.html",
+      "bytes": 6310,
+      "sha256": "e362fbecb4dc89163d4e9af791c32ef64dfa328760e71144f96113e7c6ce3d4b"
+    },
+    {
+      "path": "script.js",
+      "bytes": 779,
+      "sha256": "d2eaca9c321b18940814a1c50897554d572c2721b68f7c27b3fe842a5ebe3dd7"
+    },
+    {
+      "path": "style.css",
+      "bytes": 6230,
+      "sha256": "bda4617aeb3a37f86b2b7626324be5d559d977e0eee9d25026806d43da4a77bd"
+    }
+  ]
+}
