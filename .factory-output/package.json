@@ -1,0 +1,12 @@
+{
+  "name": "golden-reference-workflow",
+  "version": "1.0.0",
+  "description": "Golden Reference factory workflow and verification runner",
+  "main": "verifier.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node verifier.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

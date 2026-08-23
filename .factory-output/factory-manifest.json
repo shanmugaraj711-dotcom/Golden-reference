@@ -1,0 +1,36 @@
+{
+  "project_id": "proj_b6eba177f17d4fec81b64f3931410fa6",
+  "project_name": "Golden Reference Persistence Test",
+  "version": "0.1.0",
+  "instruction": "Run the Golden Reference factory workflow and verify each stage with real evidence",
+  "output_target": "web",
+  "gate": "passed",
+  "files": [
+    {
+      "path": "index.html",
+      "bytes": 1998,
+      "sha256": "483458f0505281d8dd096f5eb127a1b24053e034643c14aca8c09f3a34fcb20c"
+    },
+    {
+      "path": "package.json",
+      "bytes": 295,
+      "sha256": "4fa7b2db8e320d1d42d0e90b685066de8a425d32dc5313ab2e842d8e630c512f"
+    },
+    {
+      "path": "server.js",
+      "bytes": 1107,
+      "sha256": "f2c17a317c50b3f0b485640d334d0c92065ef04ec3dd42df82dfdb54ea7d7413"
+    },
+    {
+      "path": "verifier.js",
+      "bytes": 966,
+      "sha256": "1f2bd319e616428392a5468a27801bab89dba3f9739803bea79bb6bf11be1cbb"
+    },
+    {
+      "path": "workflow.json",
+      "bytes": 756,
+      "sha256": "de40adb4bbf0a67d952cdf049ecd99e46e1b76f0e5337c804569635dde045e3c"
+    }
+  ],
+  "generated_at": "2026-08-23T18:07:29.998176+00:00"
+}
