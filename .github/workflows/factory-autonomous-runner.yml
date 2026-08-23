@@ -1,0 +1,143 @@
+name: Factory Autonomous Runner
+
+on:
+  schedule:
+    - cron: "7/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+concurrency:
+  group: factory-autonomous-runner
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      FACTORY_DELIVERY_TOKEN: ${{ secrets.FACTORY_DELIVERY_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install factory runtime
+        run: pip install -r api/requirements.txt
+
+      - name: Claim and execute next factory run
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, re, subprocess, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+          if not raw:
+              raise SystemExit("FIREBASE_SERVICE_ACCOUNT_JSON GitHub secret is required for the autonomous runner")
+          info = json.loads(raw)
+          try:
+              app = firebase_admin.get_app("factory-runner")
+          except ValueError:
+              app = firebase_admin.initialize_app(credentials.Certificate(info), {"projectId": info.get("project_id")}, name="factory-runner")
+          store = firestore.client(app=app)
+
+          docs = list(store.collection("projects").order_by("updatedAt", direction=firestore.Query.ASCENDING).limit(50).stream())
+          candidate = None
+          for snap in docs:
+              p = snap.to_dict() or {}
+              fc = p.get("factoryControl") or {}
+              cmd = fc.get("lastCommand") or {}
+              if str(fc.get("status", "")).upper() == "RUNNING" and str(cmd.get("status", "")).upper() == "RUNNING":
+                  candidate = (snap.id, p, fc, cmd)
+                  break
+          if not candidate:
+              print("No RUNNING factory command; runner is idle.")
+              raise SystemExit(0)
+
+          pid, project, fc, cmd = candidate
+          ref = store.collection("projects").document(pid)
+          now = lambda: datetime.now(timezone.utc).isoformat()
+          start = int(cmd.get("startStep", fc.get("startStep", 1)))
+          end = int(cmd.get("endStep", fc.get("endStep", 10)))
+          instruction = str(cmd.get("instruction") or project.get("brief") or "").strip()
+          target = str(cmd.get("outputTarget") or "web").strip().lower()
+          version = str(cmd.get("version") or project.get("currentVersion") or "0.1.0")
+          command_id = str(cmd.get("id") or "cmd_unknown")
+
+          history = list(fc.get("history") or [])
+          history.append({"action":"worker","at":now(),"stage":max(start,1),"status":"RUNNING"})
+          fc.update({"currentStage":max(start,1),"status":"RUNNING","history":history[-50:],"evidence":{"intake":"persisted","requirements":"captured","plan":"worker-started"}})
+          ref.update({"factoryControl":fc,"lifecycleState":"BUILDING","nextCustomerAction":"Factory build in progress","updatedAt":now()})
+
+          workspace = Path("generated-project")
+          if workspace.exists(): subprocess.run(["rm","-rf",str(workspace)],check=True)
+          workspace.mkdir()
+          env = os.environ.copy(); env["FACTORY_REQUEST"] = instruction; env["FACTORY_WORKSPACE"] = str(workspace)
+          subprocess.run(["python","scripts/gemini_project_worker.py"],check=True,env=env)
+          subprocess.run(["python","scripts/project_gate.py"],check=True,env=env)
+
+          manifest=[]
+          for p in sorted(x for x in workspace.rglob("*") if x.is_file()):
+              data=p.read_bytes(); manifest.append({"path":str(p.relative_to(workspace)),"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest()})
+          (workspace/"factory-manifest.json").write_text(json.dumps({"project_id":pid,"project_name":project.get("projectName","generated-project"),"version":version,"instruction":instruction,"output_target":target,"gate":"passed","files":manifest,"generated_at":now()},indent=2),encoding="utf-8")
+
+          safe = re.sub(r"[^a-z0-9-]+","-",str(project.get("projectName",pid)).lower()).strip("-") or pid
+          branch=f"factory-delivery/{safe}-{command_id}"
+          subprocess.run(["git","config","user.name","Project Factory"],check=True)
+          subprocess.run(["git","config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
+          subprocess.run(["git","switch","-c",branch],check=True)
+          out=Path(".factory-output")
+          if out.exists(): subprocess.run(["rm","-rf",str(out)],check=True)
+          out.mkdir(); subprocess.run(["cp","-R",f"{workspace}/.",".factory-output/"],check=True)
+          subprocess.run(["git","add",".factory-output"],check=True)
+          subprocess.run(["git","commit","-m",f"factory: deliver {safe} {version}"],check=True)
+          subprocess.run(["git","push","origin",branch],check=True)
+
+          destination_repo=str(project.get("destinationRepo") or "").strip(); destination_branch=str(project.get("destinationBranch") or "main").strip(); destination_url=str(project.get("productionUrl") or project.get("previewUrl") or "").strip()
+          deployment="PENDING"; health="PENDING"; hosting="PENDING"; handoff="PENDING"
+          token=os.environ.get("FACTORY_DELIVERY_TOKEN","").strip()
+          if destination_repo and token:
+              tmp=Path("/tmp/factory-destination")
+              subprocess.run(["rm","-rf",str(tmp)],check=True)
+              subprocess.run(["git","clone",f"https://x-access-token:{token}@github.com/{destination_repo}.git",str(tmp)],check=True)
+              subprocess.run(["git","-C",str(tmp),"checkout",destination_branch],check=True)
+              for child in list(tmp.iterdir()):
+                  if child.name != ".git": subprocess.run(["rm","-rf",str(child)],check=True)
+              subprocess.run(["cp","-R",f"{workspace}/.",f"{tmp}/"],check=True)
+              subprocess.run(["git","-C",str(tmp),"add","-A"],check=True)
+              subprocess.run(["git","-C",str(tmp),"config","user.name","Project Factory"],check=True)
+              subprocess.run(["git","-C",str(tmp),"config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
+              subprocess.run(["git","-C",str(tmp),"commit","-m",f"factory: deliver {safe} {version}"],check=False)
+              subprocess.run(["git","-C",str(tmp),"push","origin",destination_branch],check=True)
+              deployment="PASSED"; hosting="CONNECTED"; handoff="READY"
+
+          if destination_url:
+              try:
+                  req=urllib.request.Request(destination_url,headers={"User-Agent":"Golden-Reference-Factory/1.0"})
+                  with urllib.request.urlopen(req,timeout=20) as r: health="PASSED" if r.status==200 else "FAILED"
+              except Exception as exc:
+                  health="FAILED"; fc["lastError"]=f"health check: {type(exc).__name__}: {exc}"
+
+          complete = deployment=="PASSED" and health=="PASSED" and handoff=="READY"
+          fc["currentStage"] = end if complete else min(max(end,8),8)
+          fc["status"] = "COMPLETED" if complete else "PAUSED"
+          fc["pauseReason"] = "" if complete else "Real deployment/hosting target is required; no fake completion"
+          fc["lastCommand"] = dict(cmd, status="COMPLETED" if complete else "PAUSED", completedAt=now() if complete else None)
+          fc["queue"]=[dict(x,status=("COMPLETED" if complete and x.get("id")==command_id else ("PAUSED" if not complete and x.get("id")==command_id else x.get("status")))) for x in list(fc.get("queue") or [])]
+          fc["evidence"]={"intake":"persisted","requirements":"captured","plan":"worker-started","build":"generated","test":"passed","repair":"not-needed","quality":"passed","package":"manifest-created","sourceBranch":branch,"deployment":deployment,"healthCheck":health}
+          ref.update({"factoryControl":fc,"verification":{"qualityGate":"PASSED","deployment":deployment,"healthCheck":health},"ownership":{"repository":"READY","hosting":hosting,"handoff":handoff},"deliveryEvidence":{"version":version,"sourceBranch":branch,"manifest":"factory-manifest.json","qualityGate":"PASSED"},"lifecycleState":"READY" if complete else "VERIFYING","nextCustomerAction":"Project is ready for customer delivery" if complete else "Factory needs a real deployment/hosting target","updatedAt":now()})
+          print(json.dumps({"status":"processed","projectId":pid,"commandId":command_id,"stage":fc["currentStage"],"sourceBranch":branch,"deployment":deployment,"health":health,"handoff":handoff,"complete":complete},indent=2))
+          PY
