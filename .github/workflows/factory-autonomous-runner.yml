@@ -60,11 +60,13 @@ jobs:
               p = snap.to_dict() or {}
               fc = p.get("factoryControl") or {}
               cmd = fc.get("lastCommand") or {}
-              if str(fc.get("status", "")).upper() == "RUNNING" and str(cmd.get("status", "")).upper() == "RUNNING":
+              cmd_status = str(cmd.get("status", "")).upper()
+              has_destination = bool(str(p.get("destinationRepo") or "").strip() and str(p.get("productionUrl") or p.get("previewUrl") or "").strip())
+              if str(fc.get("status", "")).upper() == "RUNNING" and (cmd_status == "RUNNING" or (cmd_status == "PAUSED" and has_destination)):
                   candidate = (snap.id, p, fc, cmd)
                   break
           if not candidate:
-              print("No RUNNING factory command; runner is idle.")
+              print("No eligible factory command; runner is idle.")
               raise SystemExit(0)
 
           pid, project, fc, cmd = candidate
@@ -80,6 +82,8 @@ jobs:
           history = list(fc.get("history") or [])
           history.append({"action":"worker","at":now(),"stage":max(start,1),"status":"RUNNING"})
           fc.update({"currentStage":max(start,1),"status":"RUNNING","history":history[-50:],"evidence":{"intake":"persisted","requirements":"captured","plan":"worker-started"}})
+          fc["lastCommand"] = dict(cmd, status="RUNNING")
+          fc["queue"] = [dict(x, status=("RUNNING" if x.get("id") == command_id else x.get("status"))) for x in list(fc.get("queue") or [])]
           ref.update({"factoryControl":fc,"lifecycleState":"BUILDING","nextCustomerAction":"Factory build in progress","updatedAt":now()})
 
           workspace = Path("generated-project")
