@@ -16,6 +16,14 @@
       <article class="card"><span class="label">VERIFICATION</span><ul><li>Quality gate <b id="qualityGate">—</b></li><li>Deployment <b id="deployment">—</b></li><li>Live health check <b id="healthCheck">—</b></li></ul></article>
     </section>
     <section id="delivery" class="card delivery"><div><span class="label">DELIVERY</span><h3 id="deliveryTitle">Loading evidence…</h3><p id="deliveryEvidence">—</p></div><div class="actions"><a id="preview" class="button" href="#" hidden>Open preview</a><a id="production" class="button" href="#" hidden>Open live project</a></div></section>
+    <section class="card customer-actions">
+      <div><span class="label">CUSTOMER ACTIONS</span><h3>Approve delivery or request changes</h3><p id="actionMessage">Actions are recorded against this project version.</p></div>
+      <div class="action-forms">
+        <form id="approvalForm"><input id="approvalComment" aria-label="Approval comment" placeholder="Optional approval comment"><button type="submit" class="button">Approve</button></form>
+        <form id="changeRequestForm"><input id="changeRequest" aria-label="Change request" placeholder="Describe the change needed" required><button type="submit" class="button">Request change</button></form>
+      </div>
+      <div id="customerHistory"><strong>Activity</strong><p id="approvalHistory">No approvals recorded.</p><p id="changeHistory">No change requests recorded.</p></div>
+    </section>
     <section class="grid">
       <article class="card"><span class="label">OWNERSHIP</span><ul><li>Repository <b id="repoOwnership">—</b></li><li>Hosting <b id="hostingOwnership">—</b></li><li>Handoff <b id="handoffOwnership">—</b></li></ul></article>
       <article class="card"><span class="label">MAINTENANCE</span><strong id="maintenanceStatus">—</strong><p id="maintenanceVersion">—</p><p id="recentChanges">—</p></article>
