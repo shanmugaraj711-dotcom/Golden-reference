@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Golden Reference Replay Contract",
+  "type": "object",
+  "required": ["contractVersion", "projectId", "fixture", "request", "expectedStages", "determinism"],
+  "properties": {
+    "contractVersion": {"const": "1.0"},
+    "projectId": {"type": "string", "minLength": 1},
+    "fixture": {"type": "string", "minLength": 1},
+    "request": {"type": "string", "minLength": 1},
+    "expectedStages": {"type": "array", "minItems": 10, "items": {"type": "integer", "minimum": 1, "maximum": 10}},
+    "determinism": {
+      "type": "object",
+      "required": ["sameInputSamePlan", "noHiddenNetworkDependency", "boundedRetries"],
+      "properties": {
+        "sameInputSamePlan": {"type": "boolean"},
+        "noHiddenNetworkDependency": {"type": "boolean"},
+        "boundedRetries": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

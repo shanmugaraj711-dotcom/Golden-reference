@@ -1,0 +1,15 @@
+{
+  "batch": 4,
+  "name": "deterministic-replay-release-gate",
+  "status": "ready-for-merge",
+  "projects": ["sample_project", "second_project"],
+  "stageCoverage": [1,2,3,4,5,6,7,8,9,10],
+  "checks": {
+    "contractPinned": true,
+    "structuralParity": true,
+    "offlineGate": true,
+    "boundedRetriesDeclared": true,
+    "workflowAdded": false,
+    "productionAutonomyEnabled": false
+  }
+}
