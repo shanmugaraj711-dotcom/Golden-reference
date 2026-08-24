@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 instruction = sys.argv[1] if len(sys.argv) > 1 else "Inspect the fixture and report exactly what changed."
@@ -25,11 +26,21 @@ prompt = (
     f"Instruction: {instruction}\nFiles: {files}"
 )
 
-url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + api_key
+# Flash-Lite is sufficient for this tiny smoke test and minimizes cost/latency.
+url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
 payload = {"contents": [{"parts": [{"text": prompt}]}]}
-req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
-with urllib.request.urlopen(req, timeout=60) as response:
-    data = json.load(response)
+req = urllib.request.Request(
+    url,
+    data=json.dumps(payload).encode(),
+    headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(req, timeout=60) as response:
+        data = json.load(response)
+except urllib.error.HTTPError as exc:
+    detail = exc.read().decode("utf-8", errors="replace")
+    raise SystemExit(f"Gemini API HTTP {exc.code}: {detail}")
 
 text = data["candidates"][0]["content"]["parts"][0]["text"]
 print("GEMINI_FIXTURE_SMOKE_OK")
