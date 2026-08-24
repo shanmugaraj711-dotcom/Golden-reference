@@ -1,78 +1,9 @@
-import { firestoreGet, jsonResponse, latestProject, normalizeProject, firestorePatch, requireAdmin } from "../_lib.js";
-
-const STATES = ["INTAKE", "BUILDING", "VERIFYING", "READY", "DELIVERED"];
-const QUALITY_KEYS = ["qualityGate", "deployment", "healthCheck"];
-const OWNERSHIP_KEYS = ["repository", "hosting", "handoff"];
-
-function auditEntry(action, projectId, detail) {
-  return { id: `audit_${crypto.randomUUID().replaceAll("-", "")}`, action, projectId, detail, actor: "founder", at: new Date().toISOString() };
-}
-
-function validateLifecycle(project, patch) {
-  if (!Object.prototype.hasOwnProperty.call(patch, "lifecycleState")) return;
-  const oldState = String(project.lifecycleState || "INTAKE").toUpperCase();
-  const nextState = String(patch.lifecycleState || oldState).toUpperCase();
-  if (!STATES.includes(nextState)) throw new Error("invalid lifecycleState");
-  if (STATES.indexOf(nextState) < STATES.indexOf(oldState)) throw new Error("lifecycleState cannot move backwards");
-  if (nextState === "READY") {
-    const verification = patch.verification || project.verification || {};
-    if (!QUALITY_KEYS.every(k => String(verification[k] || "PENDING").toUpperCase() === "PASSED")) {
-      throw new Error("READY requires qualityGate, deployment and healthCheck to be PASSED");
-    }
-  }
-  if (nextState === "DELIVERED") {
-    if (oldState !== "READY") throw new Error("DELIVERED requires READY");
-    const ownership = patch.ownership || project.ownership || {};
-    if (!OWNERSHIP_KEYS.every(k => ["READY", "CONNECTED", "PASSED"].includes(String(ownership[k] || "PENDING").toUpperCase()))) {
-      throw new Error("DELIVERED requires repository, hosting and handoff evidence");
-    }
-  }
-}
-
-export async function onRequestGet({ request, env }) {
-  try {
-    const url = new URL(request.url);
-    const pid = url.searchParams.get("id")?.trim();
-    const cid = url.searchParams.get("customerId")?.trim();
-    const project = pid ? await firestoreGet(env, pid) : await latestProject(env);
-    if (!project) return jsonResponse({ status: "not_found", error: "project not found" }, 404);
-    if (cid && String(project.customerId || "") !== cid) return jsonResponse({ status: "unauthorized", error: "project access denied" }, 401);
-    return jsonResponse({ status: "ok", project: normalizeProject(project), lifecycleStates: STATES });
-  } catch (error) {
-    return jsonResponse({ status: "persistence_error", error: String(error.message || error) }, 503);
-  }
-}
-
-export async function onRequestPost({ request, env }) {
-  try {
-    await requireAdmin(request, env);
-    const data = await request.json();
-    const pid = String(data.projectId || "").trim();
-    if (!pid) return jsonResponse({ status: "invalid_request", error: "projectId is required" }, 400);
-    const project = await firestoreGet(env, pid);
-    if (!project) return jsonResponse({ status: "not_found", error: "project not found" }, 404);
-
-    const patch = {};
-    for (const field of ["repository", "hostingTarget", "previewUrl", "productionUrl", "currentVersion", "lifecycleState", "nextCustomerAction"]) {
-      if (field in data) patch[field] = String(data[field]);
-    }
-    if (data.verification && typeof data.verification === "object") patch.verification = { ...(project.verification || {}), ...data.verification };
-    if (data.ownership && typeof data.ownership === "object") patch.ownership = { ...(project.ownership || {}), ...data.ownership };
-    if (data.maintenance && typeof data.maintenance === "object") patch.maintenance = { ...(project.maintenance || {}), ...data.maintenance };
-    if (data.deliveryEvidence && typeof data.deliveryEvidence === "object") patch.deliveryEvidence = { ...(project.deliveryEvidence || {}), ...data.deliveryEvidence };
-
-    validateLifecycle(project, patch);
-
-    const auditLog = [...(project.auditLog || [])];
-    auditLog.push(auditEntry("project.update", pid, "Founder-controlled project state update"));
-    patch.auditLog = auditLog.slice(-100);
-    patch.updatedAt = new Date().toISOString();
-    await firestorePatch(env, pid, patch);
-    return jsonResponse({ status: "updated", project: normalizeProject({ ...project, ...patch }) });
-  } catch (error) {
-    if (error instanceof Response) return error;
-    const message = String(error.message || error);
-    const status = message.includes("project not found") ? 404 : message.includes("required") || message.includes("invalid") || message.includes("cannot move") || message.includes("requires") ? 400 : 503;
-    return jsonResponse({ status: status === 404 ? "not_found" : status === 400 ? "invalid_request" : "persistence_error", error: message }, status);
-  }
-}
+import { firestoreGet, jsonResponse, latestProject, normalizeProject, firestorePatch, requireAdmin, verifyCustomerToken, enforceSoftRateLimit, listCustomerProjects, customerConfig } from "../_lib.js";
+const STATES=["INTAKE","BUILDING","VERIFYING","READY","DELIVERED"],QUALITY_KEYS=["qualityGate","deployment","healthCheck"],OWNERSHIP_KEYS=["repository","hosting","handoff"];
+function auditEntry(action,projectId,detail,actor="founder"){return{id:`audit_${crypto.randomUUID().replaceAll("-","")}`,action,projectId,detail,actor,at:new Date().toISOString()};}
+function validateLifecycle(project,patch){if(!Object.prototype.hasOwnProperty.call(patch,"lifecycleState"))return;const oldState=String(project.lifecycleState||"INTAKE").toUpperCase(),nextState=String(patch.lifecycleState||oldState).toUpperCase();if(!STATES.includes(nextState))throw new Error("invalid lifecycleState");if(STATES.indexOf(nextState)<STATES.indexOf(oldState))throw new Error("lifecycleState cannot move backwards");if(nextState==="READY"){const v=patch.verification||project.verification||{};if(!QUALITY_KEYS.every(k=>String(v[k]||"PENDING").toUpperCase()==="PASSED"))throw new Error("READY requires qualityGate, deployment and healthCheck to be PASSED");}if(nextState==="DELIVERED"){if(oldState!=="READY")throw new Error("DELIVERED requires READY");const o=patch.ownership||project.ownership||{};if(!OWNERSHIP_KEYS.every(k=>["READY","CONNECTED","PASSED"].includes(String(o[k]||"PENDING").toUpperCase())))throw new Error("DELIVERED requires repository, hosting and handoff evidence");}}
+function sameOwner(project,user){return String(project.customerId||"")===String(user.uid||"");}
+function newProject(data,user){const name=String(data.projectName||"").trim(),brief=String(data.brief||"").trim(),model=String(data.deliveryModel||"").trim();if(!name||!brief)throw new Error("projectName and brief are required");if(!["transfer","deploy","managed"].includes(model))throw new Error("invalid deliveryModel");const now=new Date().toISOString();return{projectId:`proj_${crypto.randomUUID().replaceAll("-","")}`,customerId:user.uid,projectName:name,brief,deliveryModel:model,lifecycleState:"INTAKE",currentVersion:"0.1.0",previewUrl:"",repository:"",hostingTarget:"",productionUrl:"",verification:{qualityGate:"PENDING",deployment:"PENDING",healthCheck:"PENDING"},ownership:{repository:"PENDING",hosting:"PENDING",handoff:"PENDING"},maintenance:{status:model==="managed"?"ENROLLED":"NOT_ENROLLED",currentVersion:"0.1.0",recentChanges:[]},nextCustomerAction:"Factory intake received",lifecycleHistory:[],deliveryEvidence:{},approvals:[],changeRequests:[],createdAt:now,updatedAt:now};}
+function customerPatch(project,data,user){if(!sameOwner(project,user))throw new Error("project access denied");const patch={};if("changeRequest"in data){const text=String(data.changeRequest||"").trim();if(!text)throw new Error("changeRequest is required");const arr=[...(project.changeRequests||[])];arr.push({id:`cr_${crypto.randomUUID().replaceAll("-","")}`,request:text,status:"OPEN",version:String(project.currentVersion||"0.1.0"),customerId:user.uid,userId:user.uid,createdAt:new Date().toISOString()});patch.changeRequests=arr.slice(-50);patch.nextCustomerAction="Factory review required change request";}if("approval"in data){const decision=String(data.approval||"").toUpperCase();if(!["APPROVED","REJECTED"].includes(decision))throw new Error("approval must be APPROVED or REJECTED");const arr=[...(project.approvals||[])];arr.push({id:`apr_${crypto.randomUUID().replaceAll("-","")}`,decision,version:String(project.currentVersion||"0.1.0"),comment:String(data.comment||""),customerId:user.uid,userId:user.uid,createdAt:new Date().toISOString()});patch.approvals=arr.slice(-50);patch.nextCustomerAction=decision==="APPROVED"?"Delivery approved; Factory can complete handoff":"Customer requested changes before delivery";}if(!Object.keys(patch).length)throw new Error("no customer action supplied");patch.updatedAt=new Date().toISOString();return patch;}
+export async function onRequestGet({request,env}){try{enforceSoftRateLimit(request,env,"projects-read");const url=new URL(request.url);if(url.searchParams.get("config")==="1")return jsonResponse({status:"ok",firebase:customerConfig(env)});const raw=request.headers.get("Authorization")||"";if(raw.startsWith("Bearer ")){const user=await verifyCustomerToken(request,env);const pid=url.searchParams.get("id")?.trim();if(pid){const project=await firestoreGet(env,pid);if(!project)return jsonResponse({status:"not_found",error:"project not found"},404);if(!sameOwner(project,user))return jsonResponse({status:"unauthorized",error:"project access denied"},401);return jsonResponse({status:"ok",project:normalizeProject(project),lifecycleStates:STATES});}const projects=await listCustomerProjects(env,user.uid);return jsonResponse({status:"ok",projects:projects.map(normalizeProject),lifecycleStates:STATES});}const pid=url.searchParams.get("id")?.trim(),cid=url.searchParams.get("customerId")?.trim(),project=pid?await firestoreGet(env,pid):await latestProject(env);if(!project)return jsonResponse({status:"not_found",error:"project not found"},404);if(cid&&String(project.customerId||"")!==cid)return jsonResponse({status:"unauthorized",error:"project access denied"},401);return jsonResponse({status:"ok",project:normalizeProject(project),lifecycleStates:STATES});}catch(error){if(error instanceof Response)return error;return jsonResponse({status:"persistence_error",error:String(error.message||error)},503);}}
+export async function onRequestPost({request,env}){try{enforceSoftRateLimit(request,env,"projects-write");const data=await request.json();const action=String(data.action||"").toLowerCase();if(action==="customer_create"){const user=await verifyCustomerToken(request,env);const project=newProject(data,user);await firestorePatch(env,project.projectId,project);return jsonResponse({status:"created",project:normalizeProject(project)},201);}if(action==="customer_action"){const user=await verifyCustomerToken(request,env);const pid=String(data.projectId||"").trim();if(!pid)return jsonResponse({status:"invalid_request",error:"projectId is required"},400);const project=await firestoreGet(env,pid);if(!project)return jsonResponse({status:"not_found",error:"project not found"},404);const patch=customerPatch(project,data,user);patch.auditLog=[...(project.auditLog||[]),auditEntry("customer.action",pid,"Customer request or approval recorded",user.uid)].slice(-100);await firestorePatch(env,pid,patch);return jsonResponse({status:"updated",project:normalizeProject({...project,...patch})});}await requireAdmin(request,env);const pid=String(data.projectId||"").trim();if(!pid)return jsonResponse({status:"invalid_request",error:"projectId is required"},400);const project=await firestoreGet(env,pid);if(!project)return jsonResponse({status:"not_found",error:"project not found"},404);const patch={};for(const field of ["repository","hostingTarget","previewUrl","productionUrl","currentVersion","lifecycleState","nextCustomerAction"]){if(field in data)patch[field]=String(data[field]);}if(data.verification&&typeof data.verification==="object")patch.verification={...(project.verification||{}),...data.verification};if(data.ownership&&typeof data.ownership==="object")patch.ownership={...(project.ownership||{}),...data.ownership};if(data.maintenance&&typeof data.maintenance==="object")patch.maintenance={...(project.maintenance||{}),...data.maintenance};if(data.deliveryEvidence&&typeof data.deliveryEvidence==="object")patch.deliveryEvidence={...(project.deliveryEvidence||{}),...data.deliveryEvidence};validateLifecycle(project,patch);patch.auditLog=[...(project.auditLog||[]),auditEntry("project.update",pid,"Founder-controlled project state update")].slice(-100);patch.updatedAt=new Date().toISOString();await firestorePatch(env,pid,patch);return jsonResponse({status:"updated",project:normalizeProject({...project,...patch})});}catch(error){if(error instanceof Response)return error;const message=String(error.message||error);const status=message.includes("not found")?404:message.includes("required")||message.includes("invalid")||message.includes("access denied")||message.includes("cannot move")||message.includes("requires")?400:503;return jsonResponse({status:status===404?"not_found":status===400?"invalid_request":"persistence_error",error:message},status);}}

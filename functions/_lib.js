@@ -1,138 +1,25 @@
 const textEncoder = new TextEncoder();
-
-function b64urlBytes(bytes) {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function b64urlText(text) { return b64urlBytes(textEncoder.encode(text)); }
-function decodeB64url(value) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (value.length % 4)) % 4);
-  const binary = atob(normalized);
-  return Uint8Array.from(binary, c => c.charCodeAt(0));
-}
-async function hmac(secret, value) {
-  const key = await crypto.subtle.importKey("raw", textEncoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return b64urlBytes(new Uint8Array(await crypto.subtle.sign("HMAC", key, textEncoder.encode(value))));
-}
-export async function jsonResponse(payload, status = 200, extraHeaders = {}) {
-  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extraHeaders } });
-}
-export function getAdminKey(env) {
-  const value = String(env.FACTORY_ADMIN_KEY || "").trim();
-  if (!value) throw new Error("FACTORY_ADMIN_KEY is not configured");
-  return value;
-}
-export async function createFounderSession(env) {
-  const secret = String(env.FOUNDER_SESSION_SECRET || env.FACTORY_ADMIN_KEY || "").trim();
-  if (!secret) throw new Error("FACTORY_ADMIN_KEY is not configured");
-  const payload = b64urlText(JSON.stringify({ role: "founder", exp: Math.floor(Date.now() / 1000) + 3600 }));
-  return `${payload}.${await hmac(secret, payload)}`;
-}
-export async function validFounderSession(request, env) {
-  const secret = String(env.FOUNDER_SESSION_SECRET || env.FACTORY_ADMIN_KEY || "").trim();
-  if (!secret) return false;
-  const cookie = request.headers.get("Cookie") || "";
-  const token = cookie.split(";").map(v => v.trim()).find(v => v.startsWith("factory_session="))?.slice("factory_session=".length) || "";
-  const dot = token.lastIndexOf(".");
-  if (dot < 1) return false;
-  const payload = token.slice(0, dot), signature = token.slice(dot + 1);
-  if (signature !== await hmac(secret, payload)) return false;
-  try {
-    const data = JSON.parse(new TextDecoder().decode(decodeB64url(payload)));
-    return data.role === "founder" && Number(data.exp) > Math.floor(Date.now() / 1000);
-  } catch { return false; }
-}
-export async function requireAdmin(request, env) {
-  if (await validFounderSession(request, env)) return true;
-  const expected = getAdminKey(env);
-  const supplied = String(request.headers.get("X-Factory-Admin-Key") || "").trim();
-  if (!supplied || supplied !== expected) throw new Response(JSON.stringify({ status: "unauthorized", error: "factory admin authorization required" }), { status: 401, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-  return true;
-}
-function pemToBytes(pem) { const body = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, ""); return decodeB64url(body.replace(/\+/g, "-").replace(/\//g, "_")); }
-let tokenCache = new Map();
-async function googleAccessToken(env, serviceAccount) {
-  const cached = tokenCache.get(serviceAccount.client_email);
-  if (cached && cached.exp > Date.now() + 60000) return cached.token;
-  const header = b64urlText(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const now = Math.floor(Date.now() / 1000);
-  const claim = b64urlText(JSON.stringify({ iss: serviceAccount.client_email, scope: "https://www.googleapis.com/auth/datastore", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 }));
-  const key = await crypto.subtle.importKey("pkcs8", pemToBytes(serviceAccount.private_key), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
-  const signature = b64urlBytes(new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, textEncoder.encode(`${header}.${claim}`))));
-  const jwt = `${header}.${claim}.${signature}`;
-  const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }) });
-  if (!response.ok) throw new Error(`Google token exchange failed (${response.status})`);
-  const data = await response.json();
-  tokenCache.set(serviceAccount.client_email, { token: data.access_token, exp: Date.now() + Number(data.expires_in || 3600) * 1000 });
-  return data.access_token;
-}
-export async function firestoreConfig(env) {
-  const raw = String(env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
-  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not configured");
-  const serviceAccount = JSON.parse(raw);
-  if (!serviceAccount.project_id || !serviceAccount.client_email || !serviceAccount.private_key) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is invalid");
-  return { serviceAccount, projectId: serviceAccount.project_id, token: await googleAccessToken(env, serviceAccount) };
-}
-function fromValue(value) {
-  if (!value || typeof value !== "object") return null;
-  if ("stringValue" in value) return value.stringValue;
-  if ("integerValue" in value) return Number(value.integerValue);
-  if ("doubleValue" in value) return value.doubleValue;
-  if ("booleanValue" in value) return value.booleanValue;
-  if ("timestampValue" in value) return value.timestampValue;
-  if ("nullValue" in value) return null;
-  if ("arrayValue" in value) return (value.arrayValue.values || []).map(fromValue);
-  if ("mapValue" in value) return Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([k, v]) => [k, fromValue(v)]));
-  return null;
-}
-function toValue(value) {
-  if (value === null || value === undefined) return { nullValue: null };
-  if (typeof value === "string") return { stringValue: value };
-  if (typeof value === "boolean") return { booleanValue: value };
-  if (typeof value === "number") return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
-  if (Array.isArray(value)) return { arrayValue: { values: value.map(toValue) } };
-  if (typeof value === "object") return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toValue(v)])) } };
-  return { stringValue: String(value) };
-}
-export async function firestoreGet(env, projectId) {
-  const { projectId: firebaseProject, token } = await firestoreConfig(env);
-  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents/projects/${encodeURIComponent(projectId)}`;
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Firestore read failed (${response.status})`);
-  const data = await response.json();
-  return Object.fromEntries(Object.entries(data.fields || {}).map(([k, v]) => [k, fromValue(v)]));
-}
-export async function firestorePatch(env, projectId, patch) {
-  const { projectId: firebaseProject, token } = await firestoreConfig(env);
-  const fieldPaths = Object.keys(patch).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");
-  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents/projects/${encodeURIComponent(projectId)}?${fieldPaths}`;
-  const body = JSON.stringify({ fields: Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, toValue(v)])) });
-  const response = await fetch(url, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body });
-  if (!response.ok) throw new Error(`Firestore update failed (${response.status})`);
-  return response.json();
-}
-export function normalizeProject(project) {
-  const p = { ...(project || {}) };
-  delete p.auditLog;
-  delete p.factoryControl;
-  p.lifecycleState ||= "INTAKE"; p.currentVersion ||= "0.1.0"; p.previewUrl ||= ""; p.repository ||= ""; p.hostingTarget ||= ""; p.productionUrl ||= "";
-  p.verification ||= { qualityGate: "PENDING", deployment: "PENDING", healthCheck: "PENDING" };
-  p.ownership ||= { repository: "PENDING", hosting: "PENDING", handoff: "PENDING" };
-  p.maintenance ||= { status: "NOT_ENROLLED", currentVersion: p.currentVersion, recentChanges: [] };
-  p.nextCustomerAction ||= "Factory intake received"; p.lifecycleHistory ||= []; p.deliveryEvidence ||= {}; p.approvals ||= []; p.changeRequests ||= [];
-  return p;
-}
-export async function latestProject(env) {
-  const { projectId: firebaseProject, token } = await firestoreConfig(env);
-  const queryUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents:runQuery`;
-  const response = await fetch(queryUrl, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "projects" }], orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }], limit: 1 } }) });
-  if (!response.ok) throw new Error(`Firestore query failed (${response.status})`);
-  const rows = await response.json();
-  const doc = rows.find(row => row.document)?.document;
-  if (!doc) return null;
-  return Object.fromEntries(Object.entries(doc.fields || {}).map(([k, v]) => [k, fromValue(v)]));
-}
+function b64urlBytes(bytes) { let binary=""; const chunk=0x8000; for(let i=0;i<bytes.length;i+=chunk) binary+=String.fromCharCode(...bytes.subarray(i,i+chunk)); return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,""); }
+function b64urlText(text){return b64urlBytes(textEncoder.encode(text));}
+function decodeB64url(value){const normalized=value.replace(/-/g,"+").replace(/_/g,"/")+"=".repeat((4-(value.length%4))%4);const binary=atob(normalized);return Uint8Array.from(binary,c=>c.charCodeAt(0));}
+async function hmac(secret,value){const key=await crypto.subtle.importKey("raw",textEncoder.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);return b64urlBytes(new Uint8Array(await crypto.subtle.sign("HMAC",key,textEncoder.encode(value))));}
+export async function jsonResponse(payload,status=200,extraHeaders={}){return new Response(JSON.stringify(payload),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"same-origin",...extraHeaders}});}
+export function getAdminKey(env){const value=String(env.FACTORY_ADMIN_KEY||"").trim();if(!value)throw new Error("FACTORY_ADMIN_KEY is not configured");return value;}
+export async function createFounderSession(env){const secret=String(env.FOUNDER_SESSION_SECRET||env.FACTORY_ADMIN_KEY||"").trim();if(!secret)throw new Error("FACTORY_ADMIN_KEY is not configured");const payload=b64urlText(JSON.stringify({role:"founder",exp:Math.floor(Date.now()/1000)+3600}));return `${payload}.${await hmac(secret,payload)}`;}
+export async function validFounderSession(request,env){const secret=String(env.FOUNDER_SESSION_SECRET||env.FACTORY_ADMIN_KEY||"").trim();if(!secret)return false;const cookie=request.headers.get("Cookie")||"";const token=cookie.split(";").map(v=>v.trim()).find(v=>v.startsWith("factory_session="))?.slice("factory_session=".length)||"";const dot=token.lastIndexOf(".");if(dot<1)return false;const payload=token.slice(0,dot),signature=token.slice(dot+1);if(signature!==await hmac(secret,payload))return false;try{const data=JSON.parse(new TextDecoder().decode(decodeB64url(payload)));return data.role==="founder"&&Number(data.exp)>Math.floor(Date.now()/1000);}catch{return false;}}
+export async function requireAdmin(request,env){if(await validFounderSession(request,env))return true;const expected=getAdminKey(env);const supplied=String(request.headers.get("X-Factory-Admin-Key")||"").trim();if(!supplied||supplied!==expected)throw new Response(JSON.stringify({status:"unauthorized",error:"factory admin authorization required"}),{status:401,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});return true;}
+export async function verifyCustomerToken(request,env){const raw=request.headers.get("Authorization")||"";if(!raw.startsWith("Bearer "))throw new Response(JSON.stringify({status:"unauthorized",error:"customer authentication required"}),{status:401,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});const token=raw.slice(7).trim();const key=String(env.FIREBASE_WEB_API_KEY||"").trim();if(!key)throw new Error("FIREBASE_WEB_API_KEY is not configured");const response=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(key)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({idToken:token})});if(!response.ok)throw new Response(JSON.stringify({status:"unauthorized",error:"invalid customer session"}),{status:401,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});const data=await response.json();const user=data.users?.[0];if(!user?.localId)throw new Response(JSON.stringify({status:"unauthorized",error:"invalid customer session"}),{status:401,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});return {uid:user.localId,email:user.email||""};}
+const rateBuckets=new Map();
+export function enforceSoftRateLimit(request,env,scope="customer"){const limit=Math.max(1,Number(env.RATE_LIMIT_PER_MINUTE||30));const ip=request.headers.get("CF-Connecting-IP")||request.headers.get("X-Forwarded-For")||"unknown";const key=`${scope}:${ip}`;const now=Date.now();const bucket=rateBuckets.get(key)||{at:now,count:0};if(now-bucket.at>=60000){bucket.at=now;bucket.count=0;}bucket.count++;rateBuckets.set(key,bucket);if(bucket.count>limit)throw new Response(JSON.stringify({status:"rate_limited",error:"Too many requests. Please try again shortly."}),{status:429,headers:{"Content-Type":"application/json","Cache-Control":"no-store","Retry-After":"60"}});}
+function pemToBytes(pem){const body=pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,"");return decodeB64url(body.replace(/\+/g,"-").replace(/\//g,"_"));}
+let tokenCache=new Map();
+async function googleAccessToken(env,serviceAccount){const cached=tokenCache.get(serviceAccount.client_email);if(cached&&cached.exp>Date.now()+60000)return cached.token;const header=b64urlText(JSON.stringify({alg:"RS256",typ:"JWT"}));const now=Math.floor(Date.now()/1000);const claim=b64urlText(JSON.stringify({iss:serviceAccount.client_email,scope:"https://www.googleapis.com/auth/datastore",aud:"https://oauth2.googleapis.com/token",iat:now,exp:now+3600}));const key=await crypto.subtle.importKey("pkcs8",pemToBytes(serviceAccount.private_key),{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["sign"]);const signature=b64urlBytes(new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5",key,textEncoder.encode(`${header}.${claim}`))));const jwt=`${header}.${claim}.${signature}`;const response=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:jwt})});if(!response.ok)throw new Error(`Google token exchange failed (${response.status})`);const data=await response.json();tokenCache.set(serviceAccount.client_email,{token:data.access_token,exp:Date.now()+Number(data.expires_in||3600)*1000});return data.access_token;}
+export async function firestoreConfig(env){const raw=String(env.FIREBASE_SERVICE_ACCOUNT_JSON||"").trim();if(!raw)throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not configured");const serviceAccount=JSON.parse(raw);if(!serviceAccount.project_id||!serviceAccount.client_email||!serviceAccount.private_key)throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is invalid");return {serviceAccount,projectId:serviceAccount.project_id,token:await googleAccessToken(env,serviceAccount)};}
+function fromValue(value){if(!value||typeof value!=="object")return null;if("stringValue"in value)return value.stringValue;if("integerValue"in value)return Number(value.integerValue);if("doubleValue"in value)return value.doubleValue;if("booleanValue"in value)return value.booleanValue;if("timestampValue"in value)return value.timestampValue;if("nullValue"in value)return null;if("arrayValue"in value)return(value.arrayValue.values||[]).map(fromValue);if("mapValue"in value)return Object.fromEntries(Object.entries(value.mapValue.fields||{}).map(([k,v])=>[k,fromValue(v)]));return null;}
+function toValue(value){if(value===null||value===undefined)return{nullValue:null};if(typeof value==="string")return{stringValue:value};if(typeof value==="boolean")return{booleanValue:value};if(typeof value==="number")return Number.isInteger(value)?{integerValue:String(value)}:{doubleValue:value};if(Array.isArray(value))return{arrayValue:{values:value.map(toValue)}};if(typeof value==="object")return{mapValue:{fields:Object.fromEntries(Object.entries(value).map(([k,v])=>[k,toValue(v)]))}};return{stringValue:String(value)};}
+export async function firestoreGet(env,projectId){const{projectId:firebaseProject,token}=await firestoreConfig(env);const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents/projects/${encodeURIComponent(projectId)}`;const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`}});if(response.status===404)return null;if(!response.ok)throw new Error(`Firestore read failed (${response.status})`);const data=await response.json();return Object.fromEntries(Object.entries(data.fields||{}).map(([k,v])=>[k,fromValue(v)]));}
+export async function firestorePatch(env,projectId,patch){const{projectId:firebaseProject,token}=await firestoreConfig(env);const fieldPaths=Object.keys(patch).map(k=>`updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents/projects/${encodeURIComponent(projectId)}?${fieldPaths}`;const body=JSON.stringify({fields:Object.fromEntries(Object.entries(patch).map(([k,v])=>[k,toValue(v)]))});const response=await fetch(url,{method:"PATCH",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body});if(!response.ok)throw new Error(`Firestore update failed (${response.status})`);return response.json();}
+export function normalizeProject(project){const p={...(project||{})};delete p.auditLog;delete p.factoryControl;p.lifecycleState||="INTAKE";p.currentVersion||="0.1.0";p.previewUrl||="";p.repository||="";p.hostingTarget||="";p.productionUrl||="";p.verification||={qualityGate:"PENDING",deployment:"PENDING",healthCheck:"PENDING"};p.ownership||={repository:"PENDING",hosting:"PENDING",handoff:"PENDING"};p.maintenance||={status:"NOT_ENROLLED",currentVersion:p.currentVersion,recentChanges:[]};p.nextCustomerAction||="Factory intake received";p.lifecycleHistory||=[];p.deliveryEvidence||={};p.approvals||=[];p.changeRequests||=[];return p;}
+export async function latestProject(env){const{projectId:firebaseProject,token}=await firestoreConfig(env);const queryUrl=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents:runQuery`;const response=await fetch(queryUrl,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({structuredQuery:{from:[{collectionId:"projects"}],orderBy:[{field:{fieldPath:"createdAt"},direction:"DESCENDING"}],limit:1}})});if(!response.ok)throw new Error(`Firestore query failed (${response.status})`);const rows=await response.json();const doc=rows.find(row=>row.document)?.document;if(!doc)return null;return Object.fromEntries(Object.entries(doc.fields||{}).map(([k,v])=>[k,fromValue(v)]));}
+export async function listCustomerProjects(env,customerId){const{projectId:firebaseProject,token}=await firestoreConfig(env);const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents:runQuery`;const response=await fetch(url,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({structuredQuery:{from:[{collectionId:"projects"}],where:{fieldFilter:{field:{fieldPath:"customerId"},op:"EQUAL",value:{stringValue:customerId}}},orderBy:[{field:{fieldPath:"createdAt"},direction:"DESCENDING"}],limit:50}})});if(!response.ok)throw new Error(`Firestore customer query failed (${response.status})`);const rows=await response.json();return rows.filter(row=>row.document).map(row=>Object.fromEntries(Object.entries(row.document.fields||{}).map(([k,v])=>[k,fromValue(v))]));}
+export function customerConfig(env){return {apiKey:String(env.FIREBASE_WEB_API_KEY||""),authDomain:String(env.FIREBASE_AUTH_DOMAIN||""),projectId:String(env.FIREBASE_PROJECT_ID||""),appId:String(env.FIREBASE_APP_ID||"")};}
