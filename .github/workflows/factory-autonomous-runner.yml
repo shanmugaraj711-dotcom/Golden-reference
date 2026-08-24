@@ -32,7 +32,7 @@ jobs:
       - name: Claim and execute next factory run
         run: |
           python - <<'PY'
-          import hashlib, json, os, re, subprocess, urllib.request
+          import hashlib, json, os, re, subprocess, urllib.request, time
           from datetime import datetime, timezone
           from pathlib import Path
           import firebase_admin
@@ -94,11 +94,21 @@ jobs:
           if commit.returncode==0: subprocess.run(["git","-C",str(tmp),"push","origin",destination_branch],check=True)
           deployment="PASSED"; hosting="CONNECTED"; handoff="READY"
 
-          try:
-              req=urllib.request.Request(destination_url,headers={"User-Agent":"Golden-Reference-Factory/1.0"})
-              with urllib.request.urlopen(req,timeout=20) as r: health="PASSED" if r.status==200 else "FAILED"
-          except Exception as exc:
-              health="FAILED"; fc["lastError"]=f"health check: {type(exc).__name__}: {exc}"
+          health="FAILED"
+          last_exc=None
+          for attempt in range(1,7):
+              try:
+                  req=urllib.request.Request(destination_url,headers={"User-Agent":"Golden-Reference-Factory/1.0"})
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      if r.status==200:
+                          health="PASSED"; break
+                      last_exc=f"HTTP {r.status}"
+              except Exception as exc:
+                  last_exc=f"{type(exc).__name__}: {exc}"
+              if attempt < 6:
+                  print(f"Health check attempt {attempt}/6 not ready: {last_exc}; waiting 10s")
+                  time.sleep(10)
+          if health!="PASSED": fc["lastError"]=f"health check: {last_exc}"
           complete=deployment=="PASSED" and health=="PASSED" and handoff=="READY"
           fc["currentStage"]=end if complete else 8; fc["status"]="COMPLETED" if complete else "PAUSED"; fc["pauseReason"]="" if complete else "Deployment or health check failed"
           fc["lastCommand"]=dict(cmd,status="COMPLETED" if complete else "PAUSED",completedAt=now() if complete else None)
