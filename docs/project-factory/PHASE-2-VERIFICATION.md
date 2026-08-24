@@ -35,6 +35,21 @@ The current design therefore proves the integration boundary without claiming th
 - A coding-agent interface exists without unsafe implicit execution.
 - CI remains the authoritative automated test gate.
 
+## Batch 2 — Controlled Codex fixture integration
+
+Objective: prove the next controlled integration from the Phase 2 blueprint without touching production or the Golden-reference checkout.
+
+Scope:
+- Run the approved Codex CLI only against the temporary fixture.
+- Use the bounded adapter and its existing workspace/evidence controls.
+- Capture changed-file and command/test evidence.
+- Feed the result through the existing factory evidence boundary.
+- No production deployment authority and no customer repository writes.
+
+Pass condition: the fixture run completes successfully and produces evidence that the coding-agent adapter executed within the declared boundary.
+
+This batch is intentionally isolated from the production autonomous runner and does not regenerate or redeploy a customer project.
+
 ## Next controlled integration
 
 Connect one approved coding-agent CLI through `CodingAgent`, run it only inside an isolated workspace, capture changed files and command/test evidence, and feed the result back through the same Project Factory gates. Do not grant production deployment authority in this phase.
