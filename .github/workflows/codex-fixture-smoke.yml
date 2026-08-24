@@ -7,6 +7,9 @@ on:
         description: "Controlled instruction for the sample fixture"
         required: true
         default: "Inspect the fixture, make one small safe improvement, and report exactly what changed. Do not access secrets or modify files outside the fixture."
+  push:
+    paths:
+      - "docs/project-factory/PHASE-2-VERIFICATION.md"
 
 jobs:
   smoke:
@@ -15,7 +18,7 @@ jobs:
       contents: read
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      FIXTURE_INSTRUCTION: ${{ inputs.instruction }}
+      FIXTURE_INSTRUCTION: ${{ inputs.instruction || 'Inspect the fixture, make one small safe improvement, and report exactly what changed. Do not access secrets or modify files outside the fixture.' }}
     steps:
       - uses: actions/checkout@v4
 
