@@ -3,50 +3,111 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Project Factory — Customer Dashboard</title>
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="Project Factory customer delivery dashboard">
+  <title>Project Factory — Delivery</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="shell">
-    <header class="top"><div><div class="eyebrow">PROJECT FACTORY</div><h1>Customer Delivery</h1><p>Live project state and delivery evidence.</p></div><span id="status" class="pill live">CONNECTING</span></header>
-    <section class="hero"><div><span class="label">PROJECT</span><h2 id="projectName">Loading project…</h2><p id="projectMeta">Reading Firestore</p></div><a id="liveButton" class="button" href="#delivery" hidden>View delivery</a></section>
-    <section class="card" id="founderControl">
-      <span class="label">FOUNDER / ADMIN CONTROL</span>
-      <p>Authenticated factory controls. The admin key is never displayed or stored.</p>
-      <div class="grid">
-        <input id="adminKey" type="password" autocomplete="current-password" placeholder="Founder admin key">
-        <input id="startStep" type="number" min="1" max="10" value="1">
-        <input id="endStep" type="number" min="1" max="10" value="10">
-        <select id="outputTarget"><option value="web">web</option><option value="android">android</option><option value="ios">ios</option><option value="other">other</option></select>
+    <header class="top">
+      <div>
+        <div class="eyebrow">PROJECT FACTORY</div>
+        <h1>Delivery</h1>
+        <p class="subhead">One clear place to see what was built, verified and delivered.</p>
       </div>
-      <input id="factoryInstruction" placeholder="Factory instruction">
-      <div class="grid">
-        <button id="startFactory" class="button">Start selected range</button>
-        <button id="refreshFactory" class="button">Refresh factory state</button>
+      <span id="status" class="pill">CONNECTING</span>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="label">YOUR PROJECT</span>
+        <h2 id="projectName">Loading project…</h2>
+        <p id="projectMeta">Reading the latest verified state</p>
       </div>
-      <pre id="factoryResult">Enter the founder/admin key to use factory controls.</pre>
+      <a id="liveButton" class="button button-light" href="#delivery" hidden>View delivery</a>
     </section>
-    <section class="grid">
-      <article class="card"><span class="label">PROGRESS</span><div class="progress"><span id="progressBar"></span></div><strong id="progressText">Loading…</strong><p id="nextAction">Factory state is being loaded.</p></article>
-      <article class="card"><span class="label">DELIVERY MODEL</span><strong id="deliveryModel">—</strong><p id="modeHelp">—</p></article>
-      <article class="card"><span class="label">VERIFICATION</span><ul><li>Quality gate <b id="qualityGate">—</b></li><li>Deployment <b id="deployment">—</b></li><li>Live health check <b id="healthCheck">—</b></li></ul></article>
+
+    <section class="grid overview">
+      <article class="card progress-card">
+        <div class="card-head"><span class="label">PROGRESS</span><span class="muted" id="progressText">Loading…</span></div>
+        <div class="progress" aria-label="Project progress"><span id="progressBar"></span></div>
+        <p id="nextAction" class="next-action">Factory state is being loaded.</p>
+      </article>
+      <article class="card">
+        <span class="label">DELIVERY MODEL</span>
+        <strong id="deliveryModel" class="metric">—</strong>
+        <p id="modeHelp">—</p>
+      </article>
+      <article class="card verification-card">
+        <span class="label">VERIFICATION</span>
+        <ul>
+          <li><span>Quality gate</span><b id="qualityGate">—</b></li>
+          <li><span>Deployment</span><b id="deployment">—</b></li>
+          <li><span>Live health</span><b id="healthCheck">—</b></li>
+        </ul>
+      </article>
     </section>
-    <section id="delivery" class="card delivery"><div><span class="label">DELIVERY</span><h3 id="deliveryTitle">Loading evidence…</h3><p id="deliveryEvidence">—</p></div><div class="actions"><a id="preview" class="button" href="#" hidden>Open preview</a><a id="production" class="button" href="#" hidden>Open live project</a></div></section>
+
+    <section id="delivery" class="card delivery">
+      <div>
+        <span class="label">DELIVERY</span>
+        <h3 id="deliveryTitle">Loading evidence…</h3>
+        <p id="deliveryEvidence">—</p>
+      </div>
+      <div class="actions">
+        <a id="preview" class="button" href="#" hidden>Open preview</a>
+        <a id="production" class="button button-primary" href="#" hidden>Open live project</a>
+      </div>
+    </section>
+
     <section class="card customer-actions">
-      <div><span class="label">CUSTOMER ACTIONS</span><h3>Approve delivery or request changes</h3><p id="actionMessage">Actions are recorded against this project version.</p></div>
-      <div class="action-forms">
-        <form id="approvalForm"><input id="approvalComment" aria-label="Approval comment" placeholder="Optional approval comment"><button type="submit" class="button">Approve</button></form>
-        <form id="changeRequestForm"><input id="changeRequest" aria-label="Change request" placeholder="Describe the change needed" required><button type="submit" class="button">Request change</button></form>
+      <div>
+        <span class="label">YOUR DECISION</span>
+        <h3>Approve the delivery or request a change</h3>
+        <p id="actionMessage">Actions are recorded against this project version.</p>
       </div>
-      <div id="customerHistory"><strong>Activity</strong><p id="approvalHistory">No approvals recorded.</p><p id="changeHistory">No change requests recorded.</p></div>
+      <div class="action-forms">
+        <form id="approvalForm">
+          <input id="approvalComment" aria-label="Approval comment" placeholder="Optional approval note">
+          <button type="submit" class="button button-primary">Approve delivery</button>
+        </form>
+        <form id="changeRequestForm">
+          <input id="changeRequest" aria-label="Change request" placeholder="What would you like changed?" required>
+          <button type="submit" class="button">Request change</button>
+        </form>
+      </div>
+      <div id="customerHistory" class="activity"><strong>Activity</strong><p id="approvalHistory">No approvals recorded.</p><p id="changeHistory">No change requests recorded.</p></div>
     </section>
-    <section class="grid">
-      <article class="card"><span class="label">OWNERSHIP</span><ul><li>Repository <b id="repoOwnership">—</b></li><li>Hosting <b id="hostingOwnership">—</b></li><li>Handoff <b id="handoffOwnership">—</b></li></ul></article>
-      <article class="card"><span class="label">MAINTENANCE</span><strong id="maintenanceStatus">—</strong><p id="maintenanceVersion">—</p><p id="recentChanges">—</p></article>
-      <article class="card"><span class="label">PROJECT ID</span><code id="projectId">—</code><p id="brief">—</p></article>
+
+    <section class="grid details">
+      <article class="card">
+        <span class="label">OWNERSHIP</span>
+        <ul>
+          <li><span>Repository</span><b id="repoOwnership">—</b></li>
+          <li><span>Hosting</span><b id="hostingOwnership">—</b></li>
+          <li><span>Handoff</span><b id="handoffOwnership">—</b></li>
+        </ul>
+      </article>
+      <article class="card">
+        <span class="label">MAINTENANCE</span>
+        <strong id="maintenanceStatus" class="metric">—</strong>
+        <p id="maintenanceVersion">—</p>
+        <p id="recentChanges">—</p>
+      </article>
+      <article class="card">
+        <span class="label">PROJECT</span>
+        <code id="projectId">—</code>
+        <p id="brief">—</p>
+      </article>
     </section>
-    <section class="timeline card"><span class="label">PROJECT TIMELINE</span><div id="timeline" class="steps"></div></section>
-    <footer>Credentials and provider secrets are never displayed in the customer dashboard.</footer>
+
+    <section class="timeline card">
+      <div class="card-head"><span class="label">PROJECT JOURNEY</span><span class="muted">Live lifecycle</span></div>
+      <div id="timeline" class="steps"></div>
+    </section>
+
+    <footer>Built, tested and verified by Project Factory. Credentials and provider secrets are never displayed here.</footer>
   </main>
   <script src="app.js"></script>
 </body>
