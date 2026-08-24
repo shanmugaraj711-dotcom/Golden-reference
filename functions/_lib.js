@@ -7,41 +7,30 @@ function b64urlBytes(bytes) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function b64urlText(text) {
-  return b64urlBytes(textEncoder.encode(text));
-}
-
+function b64urlText(text) { return b64urlBytes(textEncoder.encode(text)); }
 function decodeB64url(value) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (value.length % 4)) % 4);
   const binary = atob(normalized);
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
-
 async function hmac(secret, value) {
   const key = await crypto.subtle.importKey("raw", textEncoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return b64urlBytes(new Uint8Array(await crypto.subtle.sign("HMAC", key, textEncoder.encode(value))));
 }
-
 export async function jsonResponse(payload, status = 200, extraHeaders = {}) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extraHeaders },
-  });
+  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extraHeaders } });
 }
-
 export function getAdminKey(env) {
   const value = String(env.FACTORY_ADMIN_KEY || "").trim();
   if (!value) throw new Error("FACTORY_ADMIN_KEY is not configured");
   return value;
 }
-
 export async function createFounderSession(env) {
   const secret = String(env.FOUNDER_SESSION_SECRET || env.FACTORY_ADMIN_KEY || "").trim();
   if (!secret) throw new Error("FACTORY_ADMIN_KEY is not configured");
   const payload = b64urlText(JSON.stringify({ role: "founder", exp: Math.floor(Date.now() / 1000) + 3600 }));
   return `${payload}.${await hmac(secret, payload)}`;
 }
-
 export async function validFounderSession(request, env) {
   const secret = String(env.FOUNDER_SESSION_SECRET || env.FACTORY_ADMIN_KEY || "").trim();
   if (!secret) return false;
@@ -49,17 +38,13 @@ export async function validFounderSession(request, env) {
   const token = cookie.split(";").map(v => v.trim()).find(v => v.startsWith("factory_session="))?.slice("factory_session=".length) || "";
   const dot = token.lastIndexOf(".");
   if (dot < 1) return false;
-  const payload = token.slice(0, dot);
-  const signature = token.slice(dot + 1);
+  const payload = token.slice(0, dot), signature = token.slice(dot + 1);
   if (signature !== await hmac(secret, payload)) return false;
   try {
     const data = JSON.parse(new TextDecoder().decode(decodeB64url(payload)));
     return data.role === "founder" && Number(data.exp) > Math.floor(Date.now() / 1000);
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
-
 export async function requireAdmin(request, env) {
   if (await validFounderSession(request, env)) return true;
   const expected = getAdminKey(env);
@@ -67,14 +52,8 @@ export async function requireAdmin(request, env) {
   if (!supplied || supplied !== expected) throw new Response(JSON.stringify({ status: "unauthorized", error: "factory admin authorization required" }), { status: 401, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   return true;
 }
-
-function pemToBytes(pem) {
-  const body = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
-  return decodeB64url(body.replace(/\+/g, "-").replace(/\//g, "_"));
-}
-
+function pemToBytes(pem) { const body = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, ""); return decodeB64url(body.replace(/\+/g, "-").replace(/\//g, "_")); }
 let tokenCache = new Map();
-
 async function googleAccessToken(env, serviceAccount) {
   const cached = tokenCache.get(serviceAccount.client_email);
   if (cached && cached.exp > Date.now() + 60000) return cached.token;
@@ -90,7 +69,6 @@ async function googleAccessToken(env, serviceAccount) {
   tokenCache.set(serviceAccount.client_email, { token: data.access_token, exp: Date.now() + Number(data.expires_in || 3600) * 1000 });
   return data.access_token;
 }
-
 export async function firestoreConfig(env) {
   const raw = String(env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
   if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not configured");
@@ -98,7 +76,6 @@ export async function firestoreConfig(env) {
   if (!serviceAccount.project_id || !serviceAccount.client_email || !serviceAccount.private_key) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is invalid");
   return { serviceAccount, projectId: serviceAccount.project_id, token: await googleAccessToken(env, serviceAccount) };
 }
-
 function fromValue(value) {
   if (!value || typeof value !== "object") return null;
   if ("stringValue" in value) return value.stringValue;
@@ -111,7 +88,6 @@ function fromValue(value) {
   if ("mapValue" in value) return Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([k, v]) => [k, fromValue(v)]));
   return null;
 }
-
 function toValue(value) {
   if (value === null || value === undefined) return { nullValue: null };
   if (typeof value === "string") return { stringValue: value };
@@ -121,7 +97,6 @@ function toValue(value) {
   if (typeof value === "object") return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toValue(v)])) } };
   return { stringValue: String(value) };
 }
-
 export async function firestoreGet(env, projectId) {
   const { projectId: firebaseProject, token } = await firestoreConfig(env);
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents/projects/${encodeURIComponent(projectId)}`;
@@ -131,7 +106,6 @@ export async function firestoreGet(env, projectId) {
   const data = await response.json();
   return Object.fromEntries(Object.entries(data.fields || {}).map(([k, v]) => [k, fromValue(v)]));
 }
-
 export async function firestorePatch(env, projectId, patch) {
   const { projectId: firebaseProject, token } = await firestoreConfig(env);
   const fieldPaths = Object.keys(patch).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join("&");
@@ -141,9 +115,10 @@ export async function firestorePatch(env, projectId, patch) {
   if (!response.ok) throw new Error(`Firestore update failed (${response.status})`);
   return response.json();
 }
-
 export function normalizeProject(project) {
   const p = { ...(project || {}) };
+  delete p.auditLog;
+  delete p.factoryControl;
   p.lifecycleState ||= "INTAKE"; p.currentVersion ||= "0.1.0"; p.previewUrl ||= ""; p.repository ||= ""; p.hostingTarget ||= ""; p.productionUrl ||= "";
   p.verification ||= { qualityGate: "PENDING", deployment: "PENDING", healthCheck: "PENDING" };
   p.ownership ||= { repository: "PENDING", hosting: "PENDING", handoff: "PENDING" };
@@ -151,7 +126,6 @@ export function normalizeProject(project) {
   p.nextCustomerAction ||= "Factory intake received"; p.lifecycleHistory ||= []; p.deliveryEvidence ||= {}; p.approvals ||= []; p.changeRequests ||= [];
   return p;
 }
-
 export async function latestProject(env) {
   const { projectId: firebaseProject, token } = await firestoreConfig(env);
   const queryUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseProject)}/databases/(default)/documents:runQuery`;
